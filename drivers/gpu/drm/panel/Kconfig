@@ -853,7 +853,7 @@ config DRM_PANEL_RENESAS_R61307
 
 config DRM_PANEL_RENESAS_R63419
 	tristate "Renesas R63419 dual-DSI video mode panels"
-	depends on OF && GPIOLIB
+	depends on OF
 	depends on DRM_MIPI_DSI
 	depends on BACKLIGHT_CLASS_DEVICE
 	help
@@ -961,6 +961,17 @@ config DRM_PANEL_SAMSUNG_LTL106HL02
 
 	  To compile this driver as a module, choose M here: the module
 	  will be called panel-samsung-ltl106hl02.
+
+config DRM_PANEL_SAMSUNG_S6E3FC5
+	tristate "Samsung S6E3FC5 panel driver"
+	depends on OF
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+	  Say Y here if you want to enable support for the Samsung S6E3FC5
+	  1080x2400 AMOLED DSI command-mode panel found in the Google Pixel 7a.
+	  The driver currently relies on the bootloader having powered and
+	  initialised the panel, and provides brightness and display on/off.
 
 config DRM_PANEL_SAMSUNG_S6E3FA7
 	tristate "Samsung S6E3FA7 panel driver"
