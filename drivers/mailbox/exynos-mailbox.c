@@ -133,6 +133,10 @@ static const struct of_device_id exynos_mbox_match[] = {
 		.data = &exynos_gs101_mbox_data
 	},
 	{
+		.compatible = "google,gs201-mbox",
+		.data = &exynos_gs101_mbox_data
+	},
+	{
 		.compatible = "samsung,exynos850-mbox",
 		.data = &exynos850_mbox_data
 	},
@@ -169,7 +173,8 @@ static int exynos_mbox_probe(struct platform_device *pdev)
 	if (IS_ERR(exynos_mbox->regs))
 		return PTR_ERR(exynos_mbox->regs);
 
-	pclk = devm_clk_get_enabled(dev, "pclk");
+	/* The GS201 AP<->APM mailbox has no gate in CMU_APM. */
+	pclk = devm_clk_get_optional_enabled(dev, "pclk");
 	if (IS_ERR(pclk))
 		return dev_err_probe(dev, PTR_ERR(pclk),
 				     "Failed to enable clock.\n");
