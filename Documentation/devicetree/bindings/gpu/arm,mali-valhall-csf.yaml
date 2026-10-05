@@ -18,6 +18,7 @@ properties:
     oneOf:
       - items:
           - enum:
+              - google,gs201-mali         # G710
               - mediatek,mt8196-mali
               - nxp,imx95-mali            # G310
               - rockchip,rk3588-mali
@@ -107,6 +108,29 @@ required:
 additionalProperties: false
 
 allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: google,gs201-mali
+    then:
+      properties:
+        mali-supply: false
+        sram-supply: false
+        nvmem-cells: false
+        nvmem-cell-names: false
+        power-domains:
+          maxItems: 1
+        power-domain-names: false
+        clocks:
+          minItems: 2
+          maxItems: 2
+        clock-names:
+          items:
+            - const: core
+            - const: stacks
+      required:
+        - power-domains
   - if:
       properties:
         compatible:
