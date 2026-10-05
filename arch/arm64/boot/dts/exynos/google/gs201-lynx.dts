@@ -1,0 +1,199 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Lynx (Pixel 7a) Device Tree
+ *
+ * Copyright 2022-2026 Google LLC
+ */
+
+/dts-v1/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+#include <dt-bindings/regulator/samsung,s2mpg12-regulator.h>
+
+#include "gs201.dtsi"
+
+/ {
+	model = "Google Pixel 7a (Lynx)";
+	compatible = "google,gs201-lynx", "google,gs201";
+
+	chosen {
+		#address-cells = <2>;
+		#size-cells = <1>;
+		ranges;
+
+		stdout-path = "serial0:115200n8";
+
+		/* Use display framebuffer as setup by bootloader */
+		framebuffer0: framebuffer-0 {
+			compatible = "simple-framebuffer";
+			memory-region = <&cont_splash_mem>;
+			width = <1080>;
+			height = <2400>;
+			stride = <(1080 * 4)>;
+			format = "a8r8g8b8";
+		};
+	};
+
+	reserved-memory {
+		cont_splash_mem: splash@fac00000 {
+			reg = <0x0 0xfac00000 (1080 * 2400 * 4)>;
+			no-map;
+		};
+	};
+
+	reg_placeholder: regulator-0 {
+		compatible = "regulator-fixed";
+		regulator-name = "placeholder";
+	};
+};
+
+/* Bring-up: peripherals not listed here keep the bootloader's clock state. */
+&acpm_ipc {
+	pmic-1 {
+		compatible = "samsung,s2mpg12-pmic";
+		interrupts-extended = <&gpa0 6 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pmic_int>;
+		wakeup-source;
+
+		/*
+		 * Only the rails with a consumer are described; all other
+		 * rails stay as the bootloader left them.
+		 */
+		regulators {
+			/* Touchscreen DVDD */
+			s2mpg12_ldo25m: ldo25m {
+				regulator-name = "ldo25m_ts_dvdd";
+				regulator-min-microvolt = <1800000>;
+				regulator-max-microvolt = <1800000>;
+			};
+
+			/* Touchscreen AVDD */
+			s2mpg12_ldo26m: ldo26m {
+				regulator-name = "ldo26m_ts_avdd";
+				regulator-min-microvolt = <3000000>;
+				regulator-max-microvolt = <3000000>;
+			};
+		};
+	};
+};
+
+&cmu_disp {
+	status = "okay";
+};
+
+&cmu_dpu {
+	status = "okay";
+};
+
+&cmu_hsi0 {
+	status = "okay";
+};
+
+&cmu_hsi2 {
+	status = "okay";
+};
+
+&cmu_misc {
+	status = "okay";
+};
+
+&cmu_peric0 {
+	status = "okay";
+};
+
+&cmu_peric1 {
+	status = "okay";
+};
+
+&cmu_top {
+	status = "okay";
+};
+
+&dpu {
+	status = "okay";
+};
+
+&dsim0 {
+	status = "okay";
+
+	panel@0 {
+		compatible = "samsung,s6e3fc5";
+		reg = <0>;
+	};
+};
+
+&usi_spi0 {
+	status = "okay";
+};
+
+&spi_0 {
+	cs-gpios = <&gpp20 3 GPIO_ACTIVE_LOW>;
+	status = "okay";
+
+	touchscreen@0 {
+		compatible = "goodix,gt9916";
+		reg = <0>;
+		spi-max-frequency = <10000000>;
+		interrupt-parent = <&gpa7>;
+		interrupts = <0 IRQ_TYPE_EDGE_FALLING>;
+		reset-gpios = <&gpp23 2 GPIO_ACTIVE_LOW>;
+		avdd-supply = <&s2mpg12_ldo26m>;
+		vddio-supply = <&s2mpg12_ldo25m>;
+		pinctrl-0 = <&ts_irq &ts_reset>;
+		pinctrl-names = "default";
+		touchscreen-size-x = <1080>;
+		touchscreen-size-y = <2400>;
+	};
+};
+
+&gpu {
+	status = "okay";
+};
+
+&serial_0 {
+	status = "okay";
+};
+
+&usbdrd31 {
+	/* TODO: the rails are left on by the bootloader; describe the LDOs */
+	vdd10-supply = <&reg_placeholder>;
+	vdd33-supply = <&reg_placeholder>;
+
+	status = "okay";
+};
+
+&usbdrd31_dwc3 {
+	dr_mode = "peripheral";
+	maximum-speed = "high-speed";
+
+	status = "okay";
+};
+
+&usbdrd31_phy {
+	pll-supply = <&reg_placeholder>;
+	dvdd-usb20-supply = <&reg_placeholder>;
+	vddh-usb20-supply = <&reg_placeholder>;
+	vdd33-usb20-supply = <&reg_placeholder>;
+	vdda-usbdp-supply = <&reg_placeholder>;
+	vddh-usbdp-supply = <&reg_placeholder>;
+
+	status = "okay";
+};
+
+&watchdog_cl0 {
+	status = "okay";
+};
+
+&watchdog_cl1 {
+	status = "okay";
+};
+
+&ufs_0 {
+	status = "okay";
+};
+
+&ufs_0_phy {
+	status = "okay";
+};

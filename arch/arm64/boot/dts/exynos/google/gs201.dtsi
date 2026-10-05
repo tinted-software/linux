@@ -1,0 +1,911 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * GS201 SoC (Google Tensor G2)
+ *
+ * Initial bring-up description derived from the Android gs201 device tree.
+ *
+ * This is an incremental bring-up description. Clock providers exist for
+ * TOP, MISC, PERIC0/1, HSI0/2, DPU and DISP; the UART, watchdog, UFS and
+ * display consumers use them. The USB controller still adopts the
+ * bootloader-owned clock state. Pinctrl is described for the pin groups in
+ * use; power-domain support is not yet described.
+ * Drivers for the gs101 are reused through their gs101 compatibles where the
+ * IP is the same.
+ *
+ * Copyright 2020-2026 Google LLC
+ */
+
+#include <dt-bindings/clock/google,gs101-acpm.h>
+#include <dt-bindings/clock/google,gs201.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/soc/samsung,exynos-usi.h>
+
+/ {
+	compatible = "google,gs201";
+	#address-cells = <2>;
+	#size-cells = <1>;
+
+	interrupt-parent = <&gic>;
+
+	aliases {
+		pinctrl0 = &pinctrl_gpio_alive;
+		pinctrl1 = &pinctrl_far_alive;
+		pinctrl2 = &pinctrl_gsacore;
+		pinctrl3 = &pinctrl_gsactrl;
+		pinctrl4 = &pinctrl_peric0;
+		pinctrl5 = &pinctrl_peric1;
+		pinctrl6 = &pinctrl_hsi1;
+		pinctrl7 = &pinctrl_hsi2;
+		pinctrl8 = &pinctrl_hsi2ufs;
+		serial0 = &serial_0;
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu-map {
+			cluster0 {
+				core0 {
+					cpu = <&cpu0>;
+				};
+
+				core1 {
+					cpu = <&cpu1>;
+				};
+
+				core2 {
+					cpu = <&cpu2>;
+				};
+
+				core3 {
+					cpu = <&cpu3>;
+				};
+			};
+
+			cluster1 {
+				core0 {
+					cpu = <&cpu4>;
+				};
+
+				core1 {
+					cpu = <&cpu5>;
+				};
+			};
+
+			cluster2 {
+				core0 {
+					cpu = <&cpu6>;
+				};
+
+				core1 {
+					cpu = <&cpu7>;
+				};
+			};
+		};
+
+		cpu0: cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a55";
+			reg = <0x0000>;
+			enable-method = "psci";
+			cpu-idle-states = <&ananke_cpu_sleep>;
+			capacity-dmips-mhz = <409>;
+			dynamic-power-coefficient = <195>;
+		};
+
+		cpu1: cpu@100 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a55";
+			reg = <0x0100>;
+			enable-method = "psci";
+			cpu-idle-states = <&ananke_cpu_sleep>;
+			capacity-dmips-mhz = <409>;
+			dynamic-power-coefficient = <195>;
+		};
+
+		cpu2: cpu@200 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a55";
+			reg = <0x0200>;
+			enable-method = "psci";
+			cpu-idle-states = <&ananke_cpu_sleep>;
+			capacity-dmips-mhz = <409>;
+			dynamic-power-coefficient = <195>;
+		};
+
+		cpu3: cpu@300 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a55";
+			reg = <0x0300>;
+			enable-method = "psci";
+			cpu-idle-states = <&ananke_cpu_sleep>;
+			capacity-dmips-mhz = <409>;
+			dynamic-power-coefficient = <195>;
+		};
+
+		cpu4: cpu@400 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a78";
+			reg = <0x0400>;
+			enable-method = "psci";
+			cpu-idle-states = <&hercules_cpu_sleep>;
+			capacity-dmips-mhz = <1003>;
+			dynamic-power-coefficient = <238>;
+		};
+
+		cpu5: cpu@500 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a78";
+			reg = <0x0500>;
+			enable-method = "psci";
+			cpu-idle-states = <&hercules_cpu_sleep>;
+			capacity-dmips-mhz = <1003>;
+			dynamic-power-coefficient = <238>;
+		};
+
+		cpu6: cpu@600 {
+			device_type = "cpu";
+			compatible = "arm,cortex-x1";
+			reg = <0x0600>;
+			enable-method = "psci";
+			cpu-idle-states = <&hera_cpu_sleep>;
+			capacity-dmips-mhz = <1024>;
+			dynamic-power-coefficient = <375>;
+		};
+
+		cpu7: cpu@700 {
+			device_type = "cpu";
+			compatible = "arm,cortex-x1";
+			reg = <0x0700>;
+			enable-method = "psci";
+			cpu-idle-states = <&hera_cpu_sleep>;
+			capacity-dmips-mhz = <1024>;
+			dynamic-power-coefficient = <375>;
+		};
+
+		idle-states {
+			entry-method = "psci";
+
+			ananke_cpu_sleep: cpu-ananke-sleep {
+				idle-state-name = "c2";
+				compatible = "arm,idle-state";
+				arm,psci-suspend-param = <0x0010000>;
+				local-timer-stop;
+				entry-latency-us = <70>;
+				exit-latency-us = <160>;
+				min-residency-us = <2000>;
+			};
+
+			hercules_cpu_sleep: cpu-hercules-sleep {
+				idle-state-name = "c2";
+				compatible = "arm,idle-state";
+				arm,psci-suspend-param = <0x0010000>;
+				local-timer-stop;
+				entry-latency-us = <150>;
+				exit-latency-us = <190>;
+				min-residency-us = <2500>;
+			};
+
+			hera_cpu_sleep: cpu-hera-sleep {
+				idle-state-name = "c2";
+				compatible = "arm,idle-state";
+				arm,psci-suspend-param = <0x0010000>;
+				local-timer-stop;
+				entry-latency-us = <235>;
+				exit-latency-us = <220>;
+				min-residency-us = <3500>;
+			};
+		};
+	};
+
+	/* ect node is required to be present by bootloader */
+	ect {
+	};
+
+	/* Board reference oscillator (verified: DEBUG_SEL clear -> FIN). */
+	ext_24_5m: clock-1 {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <24576000>;
+		clock-output-names = "oscclk";
+	};
+
+	cmu_misc: clock-controller@10010000 {
+		compatible = "google,gs201-cmu-misc";
+		reg = <0x0 0x10010000 0x8000>;
+		#clock-cells = <1>;
+		clocks = <&ext_24_5m>,
+			 <&cmu_top CLK_GOUT_CMU_MISC_NOC>,
+			 <&cmu_top CLK_GOUT_CMU_MISC_SSS>;
+		clock-names = "oscclk", "bus", "sss";
+		status = "disabled";
+	};
+
+	cmu_peric0: clock-controller@10800000 {
+		compatible = "google,gs201-cmu-peric0";
+		reg = <0x0 0x10800000 0x8000>;
+		#clock-cells = <1>;
+		clocks = <&ext_24_5m>,
+			 <&cmu_top CLK_GOUT_CMU_PERIC0_NOC>,
+			 <&cmu_top CLK_GOUT_CMU_PERIC0_IP>;
+		clock-names = "oscclk", "bus", "ip";
+		status = "disabled";
+	};
+
+	cmu_peric1: clock-controller@10c00000 {
+		compatible = "google,gs201-cmu-peric1";
+		reg = <0x0 0x10c00000 0x8000>;
+		#clock-cells = <1>;
+		clocks = <&ext_24_5m>,
+			 <&cmu_top CLK_GOUT_CMU_PERIC1_NOC>,
+			 <&cmu_top CLK_GOUT_CMU_PERIC1_IP>;
+		clock-names = "oscclk", "bus", "ip";
+		status = "disabled";
+	};
+
+	cmu_hsi0: clock-controller@11000000 {
+		compatible = "google,gs201-cmu-hsi0";
+		reg = <0x0 0x11000000 0x8000>;
+		#clock-cells = <1>;
+		clocks = <&ext_24_5m>,
+			 <&cmu_top CLK_GOUT_CMU_HSI0_NOC>,
+			 <&cmu_top CLK_GOUT_CMU_HSI0_DPGTC>,
+			 <&cmu_top CLK_GOUT_CMU_HSI0_USB31DRD>,
+			 <&cmu_top CLK_GOUT_CMU_HSI0_USBDPDBG>;
+		clock-names = "oscclk", "bus", "dpgtc", "usb31drd", "usbdpdbg";
+		status = "disabled";
+	};
+
+	/* Keep these domains powered until genpd and CMU PM support exist. */
+	cmu_hsi2: clock-controller@14400000 {
+		compatible = "google,gs201-cmu-hsi2";
+		reg = <0x0 0x14400000 0x8000>;
+		#clock-cells = <1>;
+		clocks = <&ext_24_5m>,
+			 <&cmu_top CLK_GOUT_CMU_HSI2_NOC>,
+			 <&cmu_top CLK_GOUT_CMU_HSI2_PCIE>,
+			 <&cmu_top CLK_GOUT_CMU_HSI2_UFS_EMBD>,
+			 <&cmu_top CLK_GOUT_CMU_HSI2_MMCCARD>;
+		clock-names = "oscclk", "bus", "pcie", "ufs", "mmc";
+		status = "disabled";
+	};
+
+	cmu_dpu: clock-controller@1c000000 {
+		compatible = "google,gs201-cmu-dpu";
+		reg = <0x0 0x1c000000 0x8000>;
+		#clock-cells = <1>;
+		clocks = <&ext_24_5m>, <&cmu_top CLK_GOUT_CMU_DPU_NOC>;
+		clock-names = "oscclk", "bus";
+		status = "disabled";
+	};
+
+	cmu_disp: clock-controller@1c200000 {
+		compatible = "google,gs201-cmu-disp";
+		reg = <0x0 0x1c200000 0x8000>;
+		#clock-cells = <1>;
+		clocks = <&ext_24_5m>, <&cmu_top CLK_GOUT_CMU_DISP_NOC>;
+		clock-names = "oscclk", "bus";
+		status = "disabled";
+	};
+
+	cmu_top: clock-controller@1e080000 {
+		compatible = "google,gs201-cmu-top";
+		reg = <0x0 0x1e080000 0x8000>;
+		#clock-cells = <1>;
+		clocks = <&ext_24_5m>;
+		clock-names = "oscclk";
+		status = "disabled";
+	};
+
+	firmware {
+		acpm_ipc: power-management {
+			compatible = "google,gs201-acpm-ipc",
+				     "google,gs101-acpm-ipc";
+			#clock-cells = <1>;
+			mboxes = <&ap2apm_mailbox>;
+			shmem = <&apm_sram>;
+		};
+	};
+
+	pmu-0 {
+		compatible = "arm,cortex-a55-pmu";
+		interrupts = <GIC_PPI 7 IRQ_TYPE_LEVEL_HIGH &ppi_cluster0>;
+	};
+
+	pmu-1 {
+		compatible = "arm,cortex-a78-pmu";
+		interrupts = <GIC_PPI 7 IRQ_TYPE_LEVEL_HIGH &ppi_cluster1>;
+	};
+
+	pmu-2 {
+		compatible = "arm,cortex-x1-pmu";
+		interrupts = <GIC_PPI 7 IRQ_TYPE_LEVEL_HIGH &ppi_cluster2>;
+	};
+
+	psci {
+		compatible = "arm,psci-1.0";
+		method = "smc";
+	};
+
+	/*
+	 * Memory map as handed over by the (Android) bootloader. Anything
+	 * here is either owned by firmware / co-processors or contains
+	 * bootloader state.
+	 */
+	reserved_memory: reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <1>;
+		ranges;
+
+		ect_binary: ect-binary@90000000 {
+			reg = <0x0 0x90000000 0x3a000>;
+			no-map;
+		};
+
+		gsa_reserved_protected: gsa@90200000 {
+			reg = <0x0 0x90200000 0x400000>;
+			no-map;
+		};
+
+		tpu_fw_ctx_reserved: tpu-ctx@91e00000 {
+			reg = <0x0 0x91e00000 0x1200000>;
+			no-map;
+		};
+
+		tpu_fw_reserved: tpu-fw@93000000 {
+			reg = <0x0 0x93000000 0x1000000>;
+			no-map;
+		};
+
+		aoc_reserve: aoc@94000000 {
+			reg = <0x0 0x94000000 0x03000000>;
+			no-map;
+		};
+
+		gxp_fw_reserved: gxp-fw@98000000 {
+			reg = <0x0 0x98000000 0x400000>;
+			no-map;
+		};
+
+		gxp_scratchpad_reserved: gxp-scratchpad@98400000 {
+			reg = <0x0 0x98400000 0x100000>;
+			no-map;
+		};
+
+		cp_aoc_rmem: cp-aoc@197fd000 {
+			reg = <0x0 0x197fd000 0x3000>;
+			no-map;
+		};
+
+		seclog_mem: seclog@c3000000 {
+			reg = <0x0 0xc3000000 0x80000>;
+			no-map;
+		};
+
+		kevents_header: log-header@d8100000 {
+			reg = <0x0 0xd8100000 0x10000>;
+			no-map;
+		};
+
+		log_kevents: log-kevents@d8110000 {
+			reg = <0x0 0xd8110000 0x700000>;
+			no-map;
+		};
+
+		log_s2d: log-s2d@d8810000 {
+			reg = <0x0 0xd8810000 0x1800000>;
+			no-map;
+		};
+
+		log_arrdumpreset: log-array-reset@da010000 {
+			reg = <0x0 0xda010000 0xa00000>;
+			no-map;
+		};
+
+		log_arrdumppanic: log-array-panic@daa10000 {
+			reg = <0x0 0xdaa10000 0xa00000>;
+			no-map;
+		};
+
+		log_slcdump: log-slcdump@db410000 {
+			reg = <0x0 0xdb410000 0x1100000>;
+			no-map;
+		};
+
+		log_preslcdump: log-preslcdump@dc510000 {
+			reg = <0x0 0xdc510000 0x1100000>;
+			no-map;
+		};
+
+		log_bcm: log-bcm@dd610000 {
+			reg = <0x0 0xdd610000 0x400000>;
+			no-map;
+		};
+
+		log_itmon: log-itmon@dda10000 {
+			reg = <0x0 0xdda10000 0x10000>;
+			no-map;
+		};
+
+		cp_rmem_1: cp-1@e8000000 {
+			reg = <0x0 0xe8000000 0x2000000>;
+			no-map;
+		};
+
+		cp_rmem: cp-0@ea400000 {
+			reg = <0x0 0xea400000 0x800000>;
+			no-map;
+		};
+
+		cp_msi_rmem: cp-msi@f6200000 {
+			reg = <0x0 0xf6200000 0x1000>;
+			no-map;
+		};
+
+		abl_reserved: abl@f8800000 {
+			reg = <0x0 0xf8800000 0x02000000>;
+			no-map;
+		};
+
+		dss_log_reserved: dss-log-reserved@fd3f0000 {
+			reg = <0x0 0xfd3f0000 0x0000e000>;
+			no-map;
+		};
+
+		debug_kinfo_reserved: debug-kinfo-reserved@fd3fe000 {
+			reg = <0x0 0xfd3fe000 0x00001000>;
+			no-map;
+		};
+
+		ramoops@fd3ff000 {
+			compatible = "ramoops";
+			reg = <0x0 0xfd3ff000 0x400000>;
+			console-size = <0x200000>;
+			pmsg-size = <0x200000>;
+			no-map;
+		};
+
+		bldr_log_reserved: bldr-log-reserved@fd800000 {
+			reg = <0x0 0xfd800000 0x00100000>;
+			no-map;
+		};
+
+		suspend_diag_log_reserved: suspend-diag-log-reserved@fd90c000 {
+			reg = <0x0 0xfd90c000 0x00001000>;
+			no-map;
+		};
+	};
+
+	/*
+	 * GPU power domains. The embedded (shader core) domain sits below
+	 * the G3D top domain, whose TZPC state is saved by the secure
+	 * monitor around a power cycle.
+	 */
+	pd_g3d: power-domain@27f00800 {
+		compatible = "google,gs201-power-domain";
+		reg = <0x0 0x27f00800 0x4>;
+		#power-domain-cells = <0>;
+		google,pmu-syscon = <&pmu_system_controller>;
+		google,pmu-offset = <0x1e00>;
+		google,tzpc-smc = <0x27f10204>;
+	};
+
+	pd_embedded_g3d: power-domain-embedded-g3d {
+		compatible = "google,gs201-power-domain";
+		#power-domain-cells = <0>;
+		power-domains = <&pd_g3d>;
+		google,pmu-syscon = <&pmu_system_controller>;
+		google,pmu-offset = <0x2000>;
+	};
+
+	/*
+	 * GPU DVFS table: core (L2/top) and shader stacks rates, using the
+	 * fastest stacks rate the downstream table pairs with each core rate.
+	 * The firmware owns the voltage so there are no supplies here.
+	 * 151 MHz is the rate both domains idle at.
+	 */
+	gpu_opp_table: opp-table-gpu {
+		compatible = "operating-points-v2";
+
+		opp-151000000 {
+			opp-hz = /bits/ 64 <151000000 151000000>;
+		};
+
+		opp-302000000 {
+			opp-hz = /bits/ 64 <302000000 251000000>;
+		};
+
+		opp-470000000 {
+			opp-hz = /bits/ 64 <470000000 351000000>;
+		};
+
+		opp-603000000 {
+			opp-hz = /bits/ 64 <603000000 471000000>;
+		};
+
+		opp-750000000 {
+			opp-hz = /bits/ 64 <750000000 572000000>;
+		};
+
+		opp-885000000 {
+			opp-hz = /bits/ 64 <885000000 701000000>;
+		};
+
+		opp-996000000 {
+			opp-hz = /bits/ 64 <996000000 848000000>;
+		};
+	};
+
+	soc: soc@0 {
+		compatible = "simple-bus";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges = <0x0 0x0 0x0 0x40000000>;
+
+		gic: interrupt-controller@10400000 {
+			compatible = "arm,gic-v3";
+			#address-cells = <0>;
+			#interrupt-cells = <4>;
+			interrupt-controller;
+			reg = <0x10400000 0x10000>, /* GICD */
+			      <0x10440000 0x100000>;/* GICR * 8 */
+			interrupts = <GIC_PPI 9 IRQ_TYPE_LEVEL_HIGH 0>;
+
+			ppi-partitions {
+				ppi_cluster0: interrupt-partition-0 {
+					affinity = <&cpu0 &cpu1 &cpu2 &cpu3>;
+				};
+
+				ppi_cluster1: interrupt-partition-1 {
+					affinity = <&cpu4 &cpu5>;
+				};
+
+				ppi_cluster2: interrupt-partition-2 {
+					affinity = <&cpu6 &cpu7>;
+				};
+			};
+		};
+
+		/*
+		 * The bootloader leaves the cluster watchdogs running, they
+		 * have to be serviced or the SoC resets.
+		 */
+		watchdog_cl0: watchdog@10060000 {
+			compatible = "google,gs101-wdt";
+			reg = <0x10060000 0x100>;
+			clocks = <&cmu_misc CLK_GOUT_MISC_WDT_CLUSTER0_PCLK>,
+				 <&ext_24_5m>;
+			clock-names = "watchdog", "watchdog_src";
+			interrupts = <GIC_SPI 797 IRQ_TYPE_LEVEL_HIGH 0>;
+			samsung,syscon-phandle = <&pmu_system_controller>;
+			samsung,cluster-index = <0>;
+
+			status = "disabled";
+		};
+
+		watchdog_cl1: watchdog@10070000 {
+			compatible = "google,gs101-wdt";
+			reg = <0x10070000 0x100>;
+			clocks = <&cmu_misc CLK_GOUT_MISC_WDT_CLUSTER1_PCLK>,
+				 <&ext_24_5m>;
+			clock-names = "watchdog", "watchdog_src";
+			interrupts = <GIC_SPI 798 IRQ_TYPE_LEVEL_HIGH 0>;
+			samsung,syscon-phandle = <&pmu_system_controller>;
+			samsung,cluster-index = <1>;
+
+			status = "disabled";
+		};
+
+		/* USI0 (UART mode), left configured by the bootloader */
+		serial_0: serial@10a00000 {
+			compatible = "google,gs101-uart";
+			reg = <0x10a00000 0xc0>;
+			clocks = <&cmu_peric0 CLK_GOUT_PERIC0_USI0_UART_PCLK>,
+				 <&cmu_peric0 CLK_GOUT_PERIC0_USI0_UART_IPCLK>;
+			clock-names = "uart", "clk_uart_baud0";
+			interrupts = <GIC_SPI 673 IRQ_TYPE_LEVEL_HIGH 0>;
+			pinctrl-0 = <&uart0_bus>;
+			pinctrl-names = "default";
+			samsung,uart-fifosize = <256>;
+
+			status = "disabled";
+		};
+
+		usbdrd31_phy: phy@11200000 {
+			compatible = "google,gs201-usb31drd-phy";
+			reg = <0x11200000 0x0200>,
+			      <0x11100000 0x0800>,
+			      <0x110f0000 0x2800>;
+			reg-names = "phy", "pcs", "pma";
+			clocks = <&cmu_hsi0 CLK_GOUT_HSI0_USB31DRD_ACLK_PHYCTRL>,
+				 <&cmu_hsi0 CLK_GOUT_HSI0_USB31DRD_I_USB20_PHY_REFCLK_26>,
+				 <&cmu_hsi0 CLK_GOUT_HSI0_UASC_HSI0_CTRL_ACLK>,
+				 <&cmu_hsi0 CLK_GOUT_HSI0_UASC_HSI0_CTRL_PCLK>,
+				 <&cmu_hsi0 CLK_GOUT_HSI0_USB31DRD_I_USBDPPHY_SCL_APB_PCLK>;
+			clock-names = "phy", "ref", "ctrl_aclk", "ctrl_pclk", "scl_pclk";
+			#phy-cells = <1>;
+			samsung,pmu-syscon = <&pmu_system_controller>;
+
+			status = "disabled";
+		};
+
+		usbdrd31: usb@11210000 {
+			compatible = "google,gs201-dwusb3", "google,gs101-dwusb3";
+			ranges = <0x0 0x11210000 0x10000>;
+			clocks = <&cmu_hsi0 CLK_GOUT_HSI0_USB31DRD_BUS_CLK_EARLY>,
+				 <&cmu_hsi0 CLK_GOUT_HSI0_USB31DRD_I_USB31DRD_SUSPEND_CLK_26>,
+				 <&cmu_hsi0 CLK_GOUT_HSI0_UASC_HSI0_LINK_ACLK>,
+				 <&cmu_hsi0 CLK_GOUT_HSI0_UASC_HSI0_LINK_PCLK>;
+			clock-names = "bus_early", "susp_clk", "link_aclk", "link_pclk";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			status = "disabled";
+
+			usbdrd31_dwc3: usb@0 {
+				compatible = "snps,dwc3";
+				reg = <0x0 0x10000>;
+				clocks = <&cmu_hsi0 CLK_GOUT_HSI0_USB31DRD_I_USB31DRD_REF_CLK_40>;
+				clock-names = "ref";
+				interrupts = <GIC_SPI 379 IRQ_TYPE_LEVEL_HIGH 0>;
+				phys = <&usbdrd31_phy 0>;
+				phy-names = "usb2-phy";
+				snps,has-lpm-erratum;
+				snps,dis_u2_susphy_quirk;
+				snps,dis_u3_susphy_quirk;
+
+				status = "disabled";
+			};
+		};
+
+		/* DECON0 + DPP DMA channels; DSIM0 and the panel come later */
+		dpu: display-controller@1c240000 {
+			compatible = "google,gs201-dpu";
+			reg = <0x1c240000 0x6000>, <0x1c0b0000 0x6000>;
+			reg-names = "decon", "dpp";
+			clocks = <&cmu_dpu CLK_GOUT_DPU_DPUF_ACLK_DMA>,
+				 <&cmu_dpu CLK_GOUT_DPU_DPUF_ACLK_DPP>,
+				 <&cmu_dpu CLK_GOUT_DPU_AD_APB_DPU_DMA_PCLKM>,
+				 <&cmu_disp CLK_GOUT_DISP_DPUB_ACLK_DECON>,
+				 <&cmu_disp CLK_GOUT_DISP_AD_APB_DECON_MAIN_PCLKM>;
+			clock-names = "dma", "dpp", "dpu-apb", "decon", "disp-apb";
+			interrupts = <GIC_SPI 241 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 240 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 239 IRQ_TYPE_LEVEL_HIGH 0>;
+			interrupt-names = "frame_start", "frame_done", "extra";
+			status = "disabled";
+
+			port {
+				dpu_out: endpoint {
+					remote-endpoint = <&dsim0_in>;
+				};
+			};
+		};
+
+		dsim0: dsi@1c2c0000 {
+			compatible = "google,gs201-dsim";
+			reg = <0x1c2c0000 0x300>;
+			clocks = <&cmu_disp CLK_GOUT_DISP_DPUB_ACLK_DECON>;
+			clock-names = "bus";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "disabled";
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+					dsim0_in: endpoint {
+						remote-endpoint = <&dpu_out>;
+					};
+				};
+			};
+		};
+
+		sysreg_hsi2: syscon@14420000 {
+			compatible = "google,gs101-hsi2-sysreg", "syscon";
+			reg = <0x14420000 0x10000>;
+			clocks = <&cmu_hsi2 CLK_GOUT_HSI2_SYSREG_HSI2_PCLK>;
+		};
+
+		ufs_0: ufs@14700000 {
+			compatible = "google,gs101-ufs";
+			reg = <0x14700000 0x200>,
+			      <0x14701100 0x200>,
+			      <0x14780000 0xa000>,
+			      <0x14600000 0x100>;
+			reg-names = "hci", "vs_hci", "unipro", "ufsp";
+			interrupts = <GIC_SPI 453 IRQ_TYPE_LEVEL_HIGH 0>;
+			clocks = <&cmu_hsi2 CLK_GOUT_HSI2_UFS_EMBD_I_ACLK>,
+				 <&cmu_hsi2 CLK_GOUT_HSI2_UFS_EMBD_I_CLK_UNIPRO>,
+				 <&cmu_hsi2 CLK_GOUT_HSI2_UFS_EMBD_I_FMP_CLK>,
+				 <&cmu_hsi2 CLK_GOUT_HSI2_QE_UFS_EMBD_HSI2_ACLK>,
+				 <&cmu_hsi2 CLK_GOUT_HSI2_QE_UFS_EMBD_HSI2_PCLK>,
+				 <&cmu_hsi2 CLK_GOUT_HSI2_SYSREG_HSI2_PCLK>;
+			clock-names = "core_clk", "sclk_unipro_main", "fmp",
+				      "aclk", "pclk", "sysreg";
+			dma-coherent;
+			freq-table-hz = <0 0>, <0 0>, <0 0>, <0 0>, <0 0>, <0 0>;
+			pinctrl-0 = <&ufs_rst_n &ufs_refclk_out>;
+			pinctrl-names = "default";
+			phys = <&ufs_0_phy>;
+			phy-names = "ufs-phy";
+			samsung,sysreg = <&sysreg_hsi2 0x710>;
+
+			status = "disabled";
+		};
+
+		ufs_0_phy: phy@14704000 {
+			compatible = "google,gs101-ufs-phy";
+			reg = <0x14704000 0x3000>;
+			reg-names = "phy-pma";
+			samsung,pmu-syscon = <&pmu_system_controller>;
+			#phy-cells = <0>;
+			clocks = <&ext_24_5m>;
+			clock-names = "ref_clk";
+
+			status = "disabled";
+		};
+
+		pinctrl_peric0: pinctrl@10840000 {
+			compatible = "google,gs201-pinctrl";
+			reg = <0x10840000 0x1000>;
+			clocks = <&cmu_peric0 CLK_GOUT_PERIC0_GPIO_PERIC0_PCLK>;
+			clock-names = "pclk";
+			interrupts = <GIC_SPI 664 IRQ_TYPE_LEVEL_HIGH 0>;
+		};
+
+		pinctrl_peric1: pinctrl@10c40000 {
+			compatible = "google,gs201-pinctrl";
+			reg = <0x10c40000 0x1000>;
+			clocks = <&cmu_peric1 CLK_GOUT_PERIC1_GPIO_PERIC1_PCLK>;
+			clock-names = "pclk";
+			interrupts = <GIC_SPI 683 IRQ_TYPE_LEVEL_HIGH 0>;
+		};
+
+		pinctrl_hsi1: pinctrl@11840000 {
+			compatible = "google,gs201-pinctrl";
+			reg = <0x11840000 0x1000>;
+			interrupts = <GIC_SPI 387 IRQ_TYPE_LEVEL_HIGH 0>;
+		};
+
+		pinctrl_hsi2: pinctrl@14440000 {
+			compatible = "google,gs201-pinctrl";
+			reg = <0x14440000 0x1000>;
+			clocks = <&cmu_hsi2 CLK_GOUT_HSI2_GPIO_HSI2_PCLK>;
+			clock-names = "pclk";
+			interrupts = <GIC_SPI 421 IRQ_TYPE_LEVEL_HIGH 0>;
+		};
+
+		pinctrl_hsi2ufs: pinctrl@14460000 {
+			compatible = "google,gs201-pinctrl";
+			reg = <0x14460000 0x1000>;
+			clocks = <&cmu_hsi2 CLK_GOUT_HSI2_GPIO_HSI2UFS_PCLK>;
+			clock-names = "pclk";
+			interrupts = <GIC_SPI 422 IRQ_TYPE_LEVEL_HIGH 0>;
+		};
+
+		pinctrl_gsactrl: pinctrl@17940000 {
+			compatible = "google,gs201-pinctrl";
+			reg = <0x17940000 0x1000>;
+		};
+
+		pinctrl_gsacore: pinctrl@17a80000 {
+			compatible = "google,gs201-pinctrl";
+			reg = <0x17a80000 0x1000>;
+		};
+
+		pinctrl_gpio_alive: pinctrl@180d0000 {
+			compatible = "google,gs201-pinctrl";
+			reg = <0x180d0000 0x1000>;
+
+			wakeup-interrupt-controller {
+				compatible = "google,gs101-wakeup-eint",
+					     "samsung,exynos850-wakeup-eint",
+					     "samsung,exynos7-wakeup-eint";
+			};
+		};
+
+		pinctrl_far_alive: pinctrl@180e0000 {
+			compatible = "google,gs201-pinctrl";
+			reg = <0x180e0000 0x1000>;
+
+			wakeup-interrupt-controller {
+				compatible = "google,gs101-wakeup-eint",
+					     "samsung,exynos850-wakeup-eint",
+					     "samsung,exynos7-wakeup-eint";
+			};
+		};
+
+		sysreg_peric1: syscon@10c20000 {
+			compatible = "google,gs101-peric1-sysreg", "syscon";
+			reg = <0x10c20000 0x10000>;
+			clocks = <&cmu_peric1 CLK_GOUT_PERIC1_SYSREG_PERIC1_PCLK>;
+		};
+
+		/* PERIC1 USI0 in SPI mode: touchscreen */
+		usi_spi0: usi@10d100c0 {
+			compatible = "google,gs101-usi", "samsung,exynos850-usi";
+			reg = <0x10d100c0 0x20>;
+			ranges;
+			#address-cells = <1>;
+			#size-cells = <1>;
+			clocks = <&cmu_peric1 CLK_GOUT_PERIC1_USI0_USI_PCLK>,
+				 <&cmu_peric1 CLK_GOUT_PERIC1_USI0_USI_IPCLK>;
+			clock-names = "pclk", "ipclk";
+			samsung,sysreg = <&sysreg_peric1 0x1000>;
+			samsung,mode = <USI_V2_SPI>;
+
+			status = "disabled";
+
+			spi_0: spi@10d10000 {
+				compatible = "google,gs101-spi";
+				reg = <0x10d10000 0x30>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+				clocks = <&cmu_peric1 CLK_GOUT_PERIC1_USI0_USI_PCLK>,
+					 <&cmu_peric1 CLK_GOUT_PERIC1_USI0_USI_IPCLK>;
+				clock-names = "spi", "spi_busclk0";
+				interrupts = <GIC_SPI 690 IRQ_TYPE_LEVEL_HIGH 0>;
+				pinctrl-0 = <&ts_spi_bus_active &ts_spi_miso_active
+					     &ts_spi_cs_active>;
+				pinctrl-names = "default";
+
+				status = "disabled";
+			};
+		};
+
+		ap2apm_mailbox: mailbox@18210000 {
+			compatible = "google,gs201-mbox";
+			reg = <0x18210000 0x1000>;
+			interrupts = <GIC_SPI 78 IRQ_TYPE_LEVEL_HIGH 0>;
+			#mbox-cells = <0>;
+		};
+
+		apm_sram: sram@18500000 {
+			compatible = "mmio-sram";
+			reg = <0x18500000 0x48000>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges = <0x0 0x18500000 0x48000>;
+		};
+
+		/* Mali-G710: the rates come from the ACPM DVFS domains */
+		gpu: gpu@28000000 {
+			compatible = "google,gs201-mali", "arm,mali-valhall-csf";
+			reg = <0x28000000 0x480000>;
+			interrupts = <GIC_SPI 329 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 330 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 328 IRQ_TYPE_LEVEL_HIGH 0>;
+			interrupt-names = "job", "mmu", "gpu";
+			clocks = <&acpm_ipc GS101_CLK_ACPM_DVFS_G3DL2>,
+				 <&acpm_ipc GS101_CLK_ACPM_DVFS_G3D>;
+			clock-names = "core", "stacks";
+			power-domains = <&pd_embedded_g3d>;
+			operating-points-v2 = <&gpu_opp_table>;
+
+			status = "disabled";
+		};
+
+		pmu_system_controller: system-controller@18060000 {
+			compatible = "google,gs101-pmu";
+			reg = <0x18060000 0x10000>;
+		};
+	};
+
+	timer {
+		compatible = "arm,armv8-timer";
+		interrupts =
+		   <GIC_PPI 13 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW) 0>,
+		   <GIC_PPI 14 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW) 0>,
+		   <GIC_PPI 11 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW) 0>,
+		   <GIC_PPI 10 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW) 0>,
+		   <GIC_PPI 12 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW) 0>;
+	};
+};
+
+#include "gs201-pinctrl.dtsi"
