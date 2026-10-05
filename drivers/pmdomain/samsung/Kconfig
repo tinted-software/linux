@@ -5,4 +5,14 @@ config EXYNOS_PM_DOMAINS
 	bool "Exynos PM domains" if COMPILE_TEST
 	depends on (ARCH_EXYNOS && PM_GENERIC_DOMAINS) || COMPILE_TEST
 
+config GS201_PM_DOMAINS
+	bool "Google Tensor GS201 PM domains"
+	depends on (ARCH_EXYNOS && PM_GENERIC_DOMAINS && OF) || COMPILE_TEST
+	select MFD_SYSCON
+	help
+	  Support for the PMU controlled power domains of the Google Tensor G2
+	  (GS201), such as the GPU domains. The domains are switched through
+	  the PMU configuration and status registers, following the vendor
+	  power-on and power-off sequences.
+
 endif
