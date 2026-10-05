@@ -1,0 +1,101 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/display/google,gs201-dpu.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Google GS201 display processing unit
+
+maintainers:
+  - Theo Paris <theo@theoparis.com>
+
+description: |
+  Display controller of the Google Tensor G2 (GS201). The frontend (DPU
+  in the CMU naming) contains the DMA and DPP layer channels, the backend
+  (DISP) contains the DECON timing generator that feeds the DSI hosts.
+  Each part is clocked from its own CMU.
+
+properties:
+  compatible:
+    const: google,gs201-dpu
+
+  reg:
+    items:
+      - description: DECON main registers
+      - description: DPU DMA channel registers
+
+  reg-names:
+    items:
+      - const: decon
+      - const: dpp
+
+  clocks:
+    items:
+      - description: DPU frontend DMA bus clock
+      - description: DPU frontend DPP bus clock
+      - description: DPU frontend register bridge clock
+      - description: DISP backend DECON bus clock
+      - description: DISP backend register bridge clock
+
+  clock-names:
+    items:
+      - const: dma
+      - const: dpp
+      - const: dpu-apb
+      - const: decon
+      - const: disp-apb
+
+  interrupts:
+    items:
+      - description: DECON frame start
+      - description: DECON frame done
+      - description: DECON extra events (TE, time-out, resource conflict)
+
+  interrupt-names:
+    items:
+      - const: frame_start
+      - const: frame_done
+      - const: extra
+
+  port:
+    $ref: /schemas/graph.yaml#/properties/port
+    description: Output to the DSI host.
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - clocks
+  - clock-names
+  - interrupts
+  - interrupt-names
+  - port
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/google,gs201.h>
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    display-controller@1c240000 {
+        compatible = "google,gs201-dpu";
+        reg = <0x1c240000 0x6000>, <0x1c0b0000 0x6000>;
+        reg-names = "decon", "dpp";
+        clocks = <&cmu_dpu CLK_GOUT_DPU_DPUF_ACLK_DMA>,
+                 <&cmu_dpu CLK_GOUT_DPU_DPUF_ACLK_DPP>,
+                 <&cmu_dpu CLK_GOUT_DPU_AD_APB_DPU_DMA_PCLKM>,
+                 <&cmu_disp CLK_GOUT_DISP_DPUB_ACLK_DECON>,
+                 <&cmu_disp CLK_GOUT_DISP_AD_APB_DECON_MAIN_PCLKM>;
+        clock-names = "dma", "dpp", "dpu-apb", "decon", "disp-apb";
+        interrupts = <GIC_SPI 241 IRQ_TYPE_LEVEL_HIGH 0>,
+                     <GIC_SPI 240 IRQ_TYPE_LEVEL_HIGH 0>,
+                     <GIC_SPI 239 IRQ_TYPE_LEVEL_HIGH 0>;
+        interrupt-names = "frame_start", "frame_done", "extra";
+
+        port {
+            endpoint {
+                remote-endpoint = <&dsim0_in>;
+            };
+        };
+    };
