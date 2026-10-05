@@ -361,7 +361,7 @@ static int devfreq_cooling_gen_tables(struct devfreq_cooling_device *dfc,
 	for (i = 0, freq = ULONG_MAX; i < num_opps; i++, freq--) {
 		struct dev_pm_opp *opp;
 
-		opp = dev_pm_opp_find_freq_floor(dev, &freq);
+		opp = dev_pm_opp_find_freq_floor_indexed(dev, &freq, 0);
 		if (IS_ERR(opp)) {
 			kfree(dfc->freq_table);
 			return PTR_ERR(opp);
