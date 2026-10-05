@@ -21,3 +21,20 @@ config ARM64_RELOC_TEST
 	tristate "Relocation testing module"
 
 source "drivers/hwtracing/coresight/Kconfig"
+
+config GS201_BRINGUP
+	bool "Pixel 7a (gs201) bring-up hacks (do not upstream)"
+	depends on ARCH_EXYNOS
+	select LIBFDT
+	help
+	  Logs the boot console into the ramoops console zone and replaces
+	  the bootloader devicetree with the built-in gs201-lynx one, keeping
+	  the bootloader's /memory, /chosen and /reserved-memory.
+
+config GS201_BRINGUP_TEST_RESET
+	bool "Reset via PSCI right after the earliest bring-up markers"
+	depends on GS201_BRINGUP
+
+config GS201_BRINGUP_DISARM_WDT
+	bool "Write WTCON=0 to the cluster watchdogs at the very start"
+	depends on GS201_BRINGUP

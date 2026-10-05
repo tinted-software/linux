@@ -69,6 +69,9 @@ obj-$(CONFIG_VMCORE_INFO)		+= vmcore_info.o
 obj-$(CONFIG_ARM_SDE_INTERFACE)		+= sdei.o
 obj-$(CONFIG_ARM64_PTR_AUTH)		+= pointer_auth.o
 obj-$(CONFIG_ARM64_MPAM)		+= mpam.o
+obj-$(CONFIG_GS201_BRINGUP)		+= gs201_bringup.o gs201_bringup_dtb.o
+AFLAGS_gs201_bringup_dtb.o		:= -I$(objtree)/arch/arm64/boot/dts/exynos/google
+$(obj)/gs201_bringup_dtb.o: $(objtree)/arch/arm64/boot/dts/exynos/google/gs201-lynx.dtb
 obj-$(CONFIG_ARM64_MTE)			+= mte.o
 obj-y					+= vdso-wrap.o
 obj-$(CONFIG_COMPAT_VDSO)		+= vdso32-wrap.o

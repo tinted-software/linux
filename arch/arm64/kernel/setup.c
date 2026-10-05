@@ -167,6 +167,10 @@ static void __init smp_build_mpidr_hash(void)
 		pr_warn("Large number of MPIDR hash buckets detected\n");
 }
 
+#ifdef CONFIG_GS201_BRINGUP
+#include "gs201_bringup.h"
+#endif
+
 static void __init setup_machine_fdt(phys_addr_t dt_phys)
 {
 	int size = 0;
@@ -289,6 +293,9 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 	early_fixmap_init();
 	early_ioremap_init();
 
+#ifdef CONFIG_GS201_BRINGUP
+	__fdt_pointer = gs201_bringup_early(__fdt_pointer);
+#endif
 	setup_machine_fdt(__fdt_pointer);
 
 	/*
