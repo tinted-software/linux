@@ -36,6 +36,26 @@
 #define GS101_CPUCL0_SENSOR_MASK (EXYNOS_TMU_SENSOR(1) |	\
 				  EXYNOS_TMU_SENSOR(2))
 
+/* TMU_TOP */
+#define GS201_CPUCL2_SENSOR_MASK (EXYNOS_TMU_SENSOR(0) |	\
+				  EXYNOS_TMU_SENSOR(7) |	\
+				  EXYNOS_TMU_SENSOR(9) |	\
+				  EXYNOS_TMU_SENSOR(10) |	\
+				  EXYNOS_TMU_SENSOR(11))
+#define GS201_CPUCL1_SENSOR_MASK (EXYNOS_TMU_SENSOR(4) |	\
+				  EXYNOS_TMU_SENSOR(6))
+#define GS201_CPUCL0_SENSOR_MASK (EXYNOS_TMU_SENSOR(1) |	\
+				  EXYNOS_TMU_SENSOR(3))
+#define GS201_ISP_SENSOR_MASK	 (EXYNOS_TMU_SENSOR(13) |	\
+				  EXYNOS_TMU_SENSOR(14) |	\
+				  EXYNOS_TMU_SENSOR(15))
+
+/* TMU_SUB */
+#define GS201_G3D_SENSOR_MASK	 (EXYNOS_TMU_SENSOR(0) |	\
+				  GENMASK(13, 8))
+#define GS201_TPU_SENSOR_MASK	 GENMASK(5, 2)
+#define GS201_AUR_SENSOR_MASK	 GENMASK(15, 14)
+
 #define GS101_REG_INTPEND(i)		((i) * 0x50 + 0xf8)
 
 enum {
@@ -101,6 +121,19 @@ static const struct acpm_tmu_sensor_group gs101_sensor_groups[] = {
 	ACPM_TMU_SENSOR_GROUP(GS101_CPUCL0_SENSOR_MASK, 2),
 };
 
+static const struct acpm_tmu_sensor_group gs201_top_sensor_groups[] = {
+	ACPM_TMU_SENSOR_GROUP(GS201_CPUCL2_SENSOR_MASK, 0),
+	ACPM_TMU_SENSOR_GROUP(GS201_CPUCL1_SENSOR_MASK, 1),
+	ACPM_TMU_SENSOR_GROUP(GS201_CPUCL0_SENSOR_MASK, 2),
+	ACPM_TMU_SENSOR_GROUP(GS201_ISP_SENSOR_MASK, 4),
+};
+
+static const struct acpm_tmu_sensor_group gs201_sub_sensor_groups[] = {
+	ACPM_TMU_SENSOR_GROUP(GS201_G3D_SENSOR_MASK, 3),
+	ACPM_TMU_SENSOR_GROUP(GS201_TPU_SENSOR_MASK, 5),
+	ACPM_TMU_SENSOR_GROUP(GS201_AUR_SENSOR_MASK, 6),
+};
+
 static const struct reg_field gs101_reg_fields[REG_INTPEND_COUNT] = {
 	[P0_INTPEND] = REG_FIELD(GS101_REG_INTPEND(0), 0, 31),
 	[P1_INTPEND] = REG_FIELD(GS101_REG_INTPEND(1), 0, 31),
@@ -134,6 +167,29 @@ static const struct acpm_tmu_driver_data acpm_tmu_gs101 = {
 	.num_sensor_groups = ARRAY_SIZE(gs101_sensor_groups),
 	.mbox_chan_id = 9,
 };
+
+/* GS201 uses the GS101 register layout. */
+static const struct acpm_tmu_driver_data acpm_tmu_gs201_top = {
+	.reg_fields = gs101_reg_fields,
+	.sensor_groups = gs201_top_sensor_groups,
+	.num_sensor_groups = ARRAY_SIZE(gs201_top_sensor_groups),
+	.mbox_chan_id = 9,
+};
+
+static const struct acpm_tmu_driver_data acpm_tmu_gs201_sub = {
+	.reg_fields = gs101_reg_fields,
+	.sensor_groups = gs201_sub_sensor_groups,
+	.num_sensor_groups = ARRAY_SIZE(gs201_sub_sensor_groups),
+	.mbox_chan_id = 9,
+};
+
+/*
+ * The firmware's TMU init covers all TMU blocks, and running it again would
+ * reset the zones another block already set up. Run it for the first block
+ * that probes.
+ */
+static DEFINE_MUTEX(acpm_tmu_init_lock);
+static bool acpm_tmu_initialized;
 
 static int acpm_tmu_op_tz_control(struct acpm_tmu_sensor *sensor, bool on)
 {
@@ -396,14 +452,16 @@ static irqreturn_t acpm_tmu_thread_fn(int irq, void *id)
 }
 
 static const struct of_device_id acpm_tmu_match[] = {
-	{ .compatible = "google,gs101-tmu-top" },
+	{ .compatible = "google,gs101-tmu-top", .data = &acpm_tmu_gs101 },
+	{ .compatible = "google,gs201-tmu-sub", .data = &acpm_tmu_gs201_sub },
+	{ .compatible = "google,gs201-tmu-top", .data = &acpm_tmu_gs201_top },
 	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(of, acpm_tmu_match);
 
 static int acpm_tmu_probe(struct platform_device *pdev)
 {
-	const struct acpm_tmu_driver_data *data = &acpm_tmu_gs101;
+	const struct acpm_tmu_driver_data *data = of_device_get_match_data(&pdev->dev);
 	struct acpm_handle *acpm_handle;
 	struct device *dev = &pdev->dev;
 	struct acpm_tmu_priv *priv;
@@ -463,7 +521,12 @@ static int acpm_tmu_probe(struct platform_device *pdev)
 	if (ret < 0)
 		return dev_err_probe(dev, ret, "Failed to resume device\n");
 
-	ret = acpm_handle->ops->tmu.init(acpm_handle, priv->mbox_chan_id);
+	mutex_lock(&acpm_tmu_init_lock);
+	if (!acpm_tmu_initialized) {
+		ret = acpm_handle->ops->tmu.init(acpm_handle, priv->mbox_chan_id);
+		acpm_tmu_initialized = !ret;
+	}
+	mutex_unlock(&acpm_tmu_init_lock);
 	if (ret) {
 		ret = dev_err_probe(dev, ret, "Failed to init TMU\n");
 		goto err_pm_put;

@@ -79,6 +79,14 @@
 	};
 };
 
+&bus_int {
+	status = "okay";
+};
+
+&bus_mif {
+	status = "okay";
+};
+
 &cmu_disp {
 	status = "okay";
 };
