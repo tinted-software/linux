@@ -1514,6 +1514,14 @@ exynos5_usbdrd_usb_v3p1_pipe_override(struct exynos5_usbdrd_phy *phy_drd)
 	reg = readl(regs_base + EXYNOS850_DRD_SECPMACTL);
 	reg |= SECPMACTL_PMA_LOW_PWR;
 	writel(reg, regs_base + EXYNOS850_DRD_SECPMACTL);
+
+	/*
+	 * The PMA no longer provides a pipe clock; the bootloader may have left
+	 * the link clocked from it, which stops the link entirely.
+	 */
+	reg = readl(regs_base + EXYNOS850_DRD_CLKRST);
+	reg &= ~CLKRST_LINK_PCLK_SEL;
+	writel(reg, regs_base + EXYNOS850_DRD_CLKRST);
 }
 
 static void exynos850_usbdrd_utmi_init(struct exynos5_usbdrd_phy *phy_drd)
