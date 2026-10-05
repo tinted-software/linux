@@ -160,6 +160,22 @@
 	status = "okay";
 };
 
+&usi13 {
+	status = "okay";
+};
+
+&hsi2c_13 {
+	status = "okay";
+	clock-frequency = <400000>;
+
+	fuel-gauge@36 {
+		compatible = "maxim,max77759";
+		reg = <0x36>;
+
+		maxim,rsense-micro-ohms = <5000>;
+	};
+};
+
 &serial_0 {
 	status = "okay";
 };

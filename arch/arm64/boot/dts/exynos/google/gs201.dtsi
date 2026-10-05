@@ -1226,6 +1226,38 @@
 			};
 		};
 
+		/* PERIC1 USI13 in I2C mode: fuel gauge and charger */
+		usi13: usi@10d600c0 {
+			compatible = "google,gs101-usi", "samsung,exynos850-usi";
+			reg = <0x10d600c0 0x20>;
+			ranges;
+			#address-cells = <1>;
+			#size-cells = <1>;
+			clocks = <&cmu_peric1 CLK_GOUT_PERIC1_USI13_USI_PCLK>,
+				 <&cmu_peric1 CLK_GOUT_PERIC1_USI13_USI_IPCLK>;
+			clock-names = "pclk", "ipclk";
+			samsung,sysreg = <&sysreg_peric1 0x1014>;
+			samsung,mode = <USI_V2_I2C>;
+
+			status = "disabled";
+
+			hsi2c_13: i2c@10d60000 {
+				compatible = "google,gs101-hsi2c",
+					     "samsung,exynosautov9-hsi2c";
+				reg = <0x10d60000 0xc0>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+				clocks = <&cmu_peric1 CLK_GOUT_PERIC1_USI13_USI_IPCLK>,
+					 <&cmu_peric1 CLK_GOUT_PERIC1_USI13_USI_PCLK>;
+				clock-names = "hsi2c", "hsi2c_pclk";
+				interrupts = <GIC_SPI 695 IRQ_TYPE_LEVEL_HIGH 0>;
+				pinctrl-0 = <&hsi2c13_bus>;
+				pinctrl-names = "default";
+
+				status = "disabled";
+			};
+		};
+
 		ap2apm_mailbox: mailbox@18210000 {
 			compatible = "google,gs201-mbox";
 			reg = <0x18210000 0x1000>;
