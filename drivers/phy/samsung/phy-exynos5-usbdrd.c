@@ -2883,10 +2883,45 @@ static const struct exynos5_usbdrd_phy_drvdata gs101_usbd31rd_phy = {
 	.n_regulators			= ARRAY_SIZE(gs101_regulator_names),
 };
 
+static const struct exynos5_usbdrd_phy_tuning gs201_tunes_utmi_postinit[] = {
+	PHY_TUNING_ENTRY_PHY(EXYNOS850_DRD_HSPPARACON,
+			     (HSPPARACON_TXVREF | HSPPARACON_TXRES |
+			      HSPPARACON_TXPREEMPAMP | HSPPARACON_SQRX |
+			      HSPPARACON_COMPDIS),
+			     (FIELD_PREP_CONST(HSPPARACON_TXVREF, 8) |
+			      FIELD_PREP_CONST(HSPPARACON_TXRES, 3) |
+			      FIELD_PREP_CONST(HSPPARACON_TXPREEMPAMP, 1) |
+			      FIELD_PREP_CONST(HSPPARACON_SQRX, 5) |
+			      FIELD_PREP_CONST(HSPPARACON_COMPDIS, 7))),
+	PHY_TUNING_ENTRY_LAST
+};
+
+/* SuperSpeed is not supported yet: there are no PIPE3 tunes for gs201. */
+static const struct exynos5_usbdrd_phy_tuning *gs201_tunes[PTS_MAX] = {
+	[PTS_UTMI_POSTINIT] = gs201_tunes_utmi_postinit,
+};
+
+static const struct exynos5_usbdrd_phy_drvdata gs201_usbd31rd_phy = {
+	.phy_cfg			= phy_cfg_gs101,
+	.phy_tunes			= gs201_tunes,
+	.phy_ops			= &gs101_usbdrd_phy_ops,
+	.pmu_offset_usbdrd0_phy		= GS101_PHY_CTRL_USB20,
+	.pmu_offset_usbdrd0_phy_ss	= GS101_PHY_CTRL_USBDP,
+	.clk_names			= gs101_clk_names,
+	.n_clks				= ARRAY_SIZE(gs101_clk_names),
+	.core_clk_names			= exynos5_core_clk_names,
+	.n_core_clks			= ARRAY_SIZE(exynos5_core_clk_names),
+	.regulator_names		= gs101_regulator_names,
+	.n_regulators			= ARRAY_SIZE(gs101_regulator_names),
+};
+
 static const struct of_device_id exynos5_usbdrd_phy_of_match[] = {
 	{
 		.compatible = "google,gs101-usb31drd-phy",
 		.data = &gs101_usbd31rd_phy
+	}, {
+		.compatible = "google,gs201-usb31drd-phy",
+		.data = &gs201_usbd31rd_phy
 	}, {
 		.compatible = "samsung,exynos2200-usb32drd-phy",
 		.data = &exynos2200_usb32drd_phy,
