@@ -1876,12 +1876,24 @@ static struct attribute *panthor_attrs[] = {
 
 ATTRIBUTE_GROUPS(panthor);
 
+/*
+ * The shader stacks run from a DVFS domain of their own, which must not be
+ * clocked above the core. The OPP core raises clocks in this order and lowers
+ * them in reverse, so listing core first keeps stacks <= core.
+ */
+static const char * const gs201_opp_clk_names[] = { "core", "stacks", NULL };
+
+static const struct panthor_soc_data soc_data_google_gs201 = {
+	.opp_clk_names = gs201_opp_clk_names,
+};
+
 static const struct panthor_soc_data soc_data_mediatek_mt8196 = {
 	.asn_hash_enable = true,
 	.asn_hash = { 0xb, 0xe, 0x0, },
 };
 
 static const struct of_device_id dt_match[] = {
+	{ .compatible = "google,gs201-mali", .data = &soc_data_google_gs201, },
 	{ .compatible = "mediatek,mt8196-mali", .data = &soc_data_mediatek_mt8196, },
 	{ .compatible = "rockchip,rk3588-mali" },
 	{ .compatible = "arm,mali-valhall-csf" },
