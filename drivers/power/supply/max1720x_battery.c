@@ -43,6 +43,8 @@
 #define MAX172XX_TTE			0x11	/* Time to empty */
 #define MAX172XX_AVG_TA			0x16	/* Average temperature */
 #define MAX172XX_CYCLES			0x17
+#define MAX172XX_TASKPERIOD		0x3c
+#define MAX172XX_VCELL			0x09
 #define MAX172XX_DESIGN_CAP		0x18	/* Design capacity */
 #define MAX172XX_AVG_VCELL		0x19
 #define MAX172XX_TTF			0x20	/* Time to full */
@@ -57,12 +59,16 @@
 static const char *const max1720x_manufacturer = "Maxim Integrated";
 static const char *const max17201_model = "MAX17201";
 static const char *const max17205_model = "MAX17205";
+static const char *const max77759_model = "MAX77759";
 
 struct max1720x_device_info {
 	struct regmap *regmap;
 	struct regmap *regmap_nv;
 	struct i2c_client *ancillary;
 	int rsense;
+	bool is_max77759;
+	/* TaskPeriod = 351 ms doubles the capacity register LSB */
+	u8 cap_lsb_shift;
 };
 
 /*
@@ -256,6 +262,7 @@ static const struct nvmem_cell_info max1720x_nvmem_cells[] = {
 
 static const enum power_supply_property max1720x_battery_props[] = {
 	POWER_SUPPLY_PROP_HEALTH,
+	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
@@ -291,7 +298,7 @@ static int max172xx_voltage_to_ps(unsigned int reg)
 static int max172xx_capacity_to_ps(unsigned int reg,
 				   struct max1720x_device_info *info)
 {
-	return reg * (500000 / info->rsense);	/* in uAh */
+	return reg * (500000 / info->rsense) << info->cap_lsb_shift;	/* in uAh */
 }
 
 /*
@@ -331,6 +338,15 @@ static int max172xx_battery_health(struct max1720x_device_info *info,
 	if (ret < 0)
 		return ret;
 
+	/*
+	 * The temperature alert thresholds are set by the original firmware
+	 * and not maintained by this driver; on the MAX77759 the high
+	 * threshold sits at 8 degC, which makes TMX useless for health
+	 * reporting. Ignore the temperature alerts there.
+	 */
+	if (info->is_max77759)
+		status &= ~(MAX172XX_STATUS_TMN | MAX172XX_STATUS_TMX);
+
 	if (status & MAX172XX_STATUS_VMN)
 		*health = POWER_SUPPLY_HEALTH_DEAD;
 	else if (status & MAX172XX_STATUS_VMX)
@@ -364,12 +380,34 @@ static int max1720x_battery_get_property(struct power_supply *psy,
 {
 	struct max1720x_device_info *info = power_supply_get_drvdata(psy);
 	unsigned int reg_val;
+	unsigned int soc;
 	int ret = 0;
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_HEALTH:
 		ret = max172xx_battery_health(info, &reg_val);
 		val->intval = reg_val;
+		break;
+	case POWER_SUPPLY_PROP_STATUS:
+		/*
+		 * The charger is not described, so the current direction is
+		 * the only signal available: positive current into the
+		 * battery means charging.
+		 */
+		ret = regmap_read(info->regmap, MAX172XX_CURRENT, &reg_val);
+		if (ret < 0)
+			return ret;
+		ret = regmap_read(info->regmap, MAX172XX_REPSOC, &soc);
+		if (ret < 0)
+			return ret;
+		if ((int16_t)reg_val > 1000)
+			val->intval = POWER_SUPPLY_STATUS_CHARGING;
+		else if ((int16_t)reg_val < -1000)
+			val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
+		else if (soc / 256 >= 100)
+			val->intval = POWER_SUPPLY_STATUS_FULL;
+		else
+			val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
 		break;
 	case POWER_SUPPLY_PROP_PRESENT:
 		/*
@@ -390,6 +428,19 @@ static int max1720x_battery_get_property(struct power_supply *psy,
 		val->intval = max172xx_percent_to_ps(reg_val);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+		if (info->is_max77759) {
+			/*
+			 * The BATT register does not populate on the m5
+			 * gauge of the MAX77759; use VCell instead.
+			 * LSB: 78.125 uV.
+			 */
+			ret = regmap_read(info->regmap, MAX172XX_VCELL,
+					  &reg_val);
+			if (ret < 0)
+				return ret;
+			val->intval = div_u64((u64)reg_val * 78125, 1000);
+			break;
+		}
 		ret = regmap_read(info->regmap, MAX172XX_BATT, &reg_val);
 		val->intval = max172xx_voltage_to_ps(reg_val);
 		break;
@@ -426,6 +477,10 @@ static int max1720x_battery_get_property(struct power_supply *psy,
 		val->intval = max172xx_capacity_to_ps(reg_val, info);
 		break;
 	case POWER_SUPPLY_PROP_MODEL_NAME:
+		if (info->is_max77759) {
+			val->strval = max77759_model;
+			break;
+		}
 		ret = regmap_read(info->regmap, MAX172XX_DEV_NAME, &reg_val);
 		if (ret)
 			return ret;
@@ -587,6 +642,7 @@ static int max1720x_probe(struct i2c_client *client)
 	struct device *dev = &client->dev;
 	struct max1720x_device_info *info;
 	struct power_supply *bat;
+	unsigned int val;
 	int ret;
 
 	info = devm_kzalloc(dev, sizeof(*info), GFP_KERNEL);
@@ -602,9 +658,47 @@ static int max1720x_probe(struct i2c_client *client)
 		return dev_err_probe(dev, PTR_ERR(info->regmap),
 				     "regmap initialization failed\n");
 
-	ret = max1720x_probe_nvmem(client, info);
-	if (ret)
-		return dev_err_probe(dev, ret, "Failed to probe nvmem\n");
+	if (device_get_match_data(dev)) {
+		/*
+		 * MAX77759: the nonvolatile memory is only reachable through
+		 * the MAXQ coprocessor, not as an ancillary I2C device. The
+		 * sense resistor value comes from DT instead.
+		 */
+		u32 rsense_uohm = 500;
+
+		info->is_max77759 = true;
+		device_property_read_u32(dev, "maxim,rsense-micro-ohms",
+					 &rsense_uohm);
+		if (!rsense_uohm)
+			return dev_err_probe(dev, -EINVAL,
+					     "invalid sense resistor value\n");
+		info->rsense = rsense_uohm / 10; /* regs in 10^-5 Ohm */
+
+		/*
+		 * TaskPeriod = 351 ms (0x2d00) doubles the capacity register
+		 * LSB; 175 ms (0x1680) keeps the base one. The register is
+		 * not reachable on all MAX77759 variants (the vendor firmware
+		 * reaches it through the MAXQ coprocessor); assume 351 ms,
+		 * the Pixel configuration, when it cannot be read.
+		 */
+		ret = regmap_read(info->regmap, MAX172XX_TASKPERIOD, &val);
+		switch (ret ? -1 : val) {
+		case 0x2d00:
+			info->cap_lsb_shift = 1;
+			break;
+		case 0x1680:
+			break;
+		default:
+			info->cap_lsb_shift = 1;
+			dev_warn(dev, "cannot read TaskPeriod (%d), assuming 351 ms\n",
+				 ret);
+			break;
+		}
+	} else {
+		ret = max1720x_probe_nvmem(client, info);
+		if (ret)
+			return dev_err_probe(dev, ret, "Failed to probe nvmem\n");
+	}
 
 	bat = devm_power_supply_register(dev, &max1720x_bat_desc, &psy_cfg);
 	if (IS_ERR(bat))
@@ -616,6 +710,8 @@ static int max1720x_probe(struct i2c_client *client)
 
 static const struct of_device_id max1720x_of_match[] = {
 	{ .compatible = "maxim,max17201" },
+	/* MAX77759: m5 gauge without I2C-reachable nonvolatile memory */
+	{ .compatible = "maxim,max77759", .data = (void *)1UL },
 	{}
 };
 MODULE_DEVICE_TABLE(of, max1720x_of_match);

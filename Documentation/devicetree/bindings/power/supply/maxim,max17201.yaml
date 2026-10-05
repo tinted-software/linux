@@ -11,6 +11,19 @@ maintainers:
 
 allOf:
   - $ref: power-supply.yaml#
+  - if:
+      properties:
+        compatible:
+          const: maxim,max77759
+    then:
+      properties:
+        reg:
+          maxItems: 1
+      required:
+        - maxim,rsense-micro-ohms
+    else:
+      required:
+        - reg-names
 
 properties:
   compatible:
@@ -20,6 +33,7 @@ properties:
           - enum:
               - maxim,max17205
           - const: maxim,max17201
+      - const: maxim,max77759
 
   reg:
     items:
@@ -34,10 +48,15 @@ properties:
   interrupts:
     maxItems: 1
 
+  maxim,rsense-micro-ohms:
+    description:
+      Sense resistor value in micro-ohms. Only meaningful on devices
+      without I2C-reachable nonvolatile memory (like the MAX77759), where
+      the calibrated value cannot be read from the gauge.
+
 required:
   - compatible
   - reg
-  - reg-names
 
 unevaluatedProperties: false
 
@@ -54,5 +73,11 @@ examples:
         reg-names = "m5", "nvmem";
         interrupt-parent = <&gpio0>;
         interrupts = <31 IRQ_TYPE_LEVEL_LOW>;
+      };
+
+      fuel-gauge@36 {
+        compatible = "maxim,max77759";
+        reg = <0x36>;
+        maxim,rsense-micro-ohms = <5000>;
       };
     };
