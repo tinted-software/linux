@@ -38,6 +38,7 @@
 #include "goodix_berlin.h"
 
 #define GOODIX_BERLIN_MAX_TOUCH			10
+#define GOODIX_BERLIN_MAX_POINT_LEN 32
 
 #define GOODIX_BERLIN_NORMAL_RESET_DELAY_MS	100
 
@@ -157,7 +158,7 @@ struct goodix_berlin_header {
 struct goodix_berlin_event {
 	struct goodix_berlin_header hdr;
 	/* The data below is u16/__le16 aligned */
-	u8 data[GOODIX_BERLIN_TOUCH_SIZE * GOODIX_BERLIN_MAX_TOUCH +
+	u8 data[GOODIX_BERLIN_MAX_POINT_LEN * GOODIX_BERLIN_MAX_TOUCH +
 		GOODIX_BERLIN_CHECKSUM_SIZE];
 };
 
@@ -178,6 +179,8 @@ struct goodix_berlin_core {
 	const struct goodix_berlin_ic_data *ic_data;
 
 	struct goodix_berlin_event event;
+	/* Size of one contact record, reported by the IC (8 on most models) */
+	u16 point_len;
 };
 
 static bool goodix_berlin_checksum_valid(const u8 *data, int size)
@@ -350,6 +353,19 @@ static int goodix_berlin_parse_ic_info(struct goodix_berlin_core *cd,
 	misc = (struct goodix_berlin_ic_info_misc *)&data[offset];
 	cd->touch_data_addr = le32_to_cpu(misc->touch_data_addr);
 
+	/*
+	 * The first bytes of a contact record are always struct
+	 * goodix_berlin_touch, but some firmwares append more per-contact
+	 * data and the checksum comes after all of it.
+	 */
+	cd->point_len = le16_to_cpu(misc->point_struct_len);
+	if (cd->point_len < GOODIX_BERLIN_TOUCH_SIZE ||
+	    cd->point_len > GOODIX_BERLIN_MAX_POINT_LEN) {
+		dev_err(cd->dev, "invalid contact record length %u\n",
+			cd->point_len);
+		return -EINVAL;
+	}
+
 	return 0;
 
 invalid_offset:
@@ -416,14 +432,13 @@ static int goodix_berlin_get_ic_info(struct goodix_berlin_core *cd)
 static int goodix_berlin_get_remaining_contacts(struct goodix_berlin_core *cd,
 						int n)
 {
-	size_t offset = 2 * GOODIX_BERLIN_TOUCH_SIZE +
-				GOODIX_BERLIN_CHECKSUM_SIZE;
+	size_t offset = 2 * cd->point_len + GOODIX_BERLIN_CHECKSUM_SIZE;
 	u32 addr = cd->touch_data_addr + GOODIX_BERLIN_HEADER_SIZE + offset;
 	int error;
 
 	error = regmap_raw_read(cd->regmap, addr,
 				&cd->event.data[offset],
-				(n - 2) * GOODIX_BERLIN_TOUCH_SIZE);
+				(n - 2) * cd->point_len);
 	if (error) {
 		dev_err_ratelimited(cd->dev, "failed to get touch data, %d\n",
 				    error);
@@ -435,14 +450,13 @@ static int goodix_berlin_get_remaining_contacts(struct goodix_berlin_core *cd,
 
 static void goodix_berlin_report_state(struct goodix_berlin_core *cd, int n)
 {
-	struct goodix_berlin_touch *touch_data =
-			(struct goodix_berlin_touch *)cd->event.data;
 	struct goodix_berlin_touch *t;
 	int i;
 	u8 type, id;
 
 	for (i = 0; i < n; i++) {
-		t = &touch_data[i];
+		t = (struct goodix_berlin_touch *)&cd->event
+			    .data[i * cd->point_len];
 
 		type = FIELD_GET(GOODIX_BERLIN_POINT_TYPE_MASK, t->status);
 		if (type == GOODIX_BERLIN_POINT_TYPE_STYLUS ||
@@ -491,7 +505,7 @@ static void goodix_berlin_touch_handler(struct goodix_berlin_core *cd)
 	}
 
 	if (touch_num) {
-		int len = touch_num * GOODIX_BERLIN_TOUCH_SIZE +
+		int len = touch_num * cd->point_len +
 			  GOODIX_BERLIN_CHECKSUM_SIZE;
 		if (!goodix_berlin_checksum_valid(cd->event.data, len)) {
 			dev_err(cd->dev, "touch data checksum error: %*ph\n",
@@ -522,7 +536,7 @@ static irqreturn_t goodix_berlin_irq(int irq, void *data)
 	/*
 	 * First, read buffer with space for 2 touch events:
 	 * - GOODIX_BERLIN_HEADER_SIZE = 8 bytes
-	 * - GOODIX_BERLIN_TOUCH_SIZE * 2 = 16 bytes
+	 * - point_len * 2 = 16 bytes (8-byte records)
 	 * - GOODIX_BERLIN_CHECKLSUM_SIZE = 2 bytes
 	 * For a total of 26 bytes.
 	 *
@@ -557,7 +571,7 @@ static irqreturn_t goodix_berlin_irq(int irq, void *data)
 	error = regmap_raw_read(cd->regmap, cd->touch_data_addr,
 				&cd->event,
 				GOODIX_BERLIN_HEADER_SIZE +
-					2 * GOODIX_BERLIN_TOUCH_SIZE +
+					2 * cd->point_len +
 					GOODIX_BERLIN_CHECKSUM_SIZE);
 	if (error) {
 		dev_warn_ratelimited(cd->dev,
