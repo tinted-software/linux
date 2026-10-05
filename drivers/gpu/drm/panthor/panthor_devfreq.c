@@ -69,9 +69,10 @@ static int panthor_devfreq_target(struct device *dev, unsigned long *freq,
 	opp = devfreq_recommended_opp(dev, freq, flags);
 	if (IS_ERR(opp))
 		return PTR_ERR(opp);
-	dev_pm_opp_put(opp);
 
-	err = dev_pm_opp_set_rate(dev, *freq);
+	/* Unlike dev_pm_opp_set_rate(), this also works with several clocks. */
+	err = dev_pm_opp_set_opp(dev, opp);
+	dev_pm_opp_put(opp);
 
 	return err;
 }
@@ -164,6 +165,17 @@ int panthor_devfreq_init(struct panthor_device *ptdev)
 	 */
 	table = dev_pm_opp_get_opp_table(dev);
 	if (IS_ERR_OR_NULL(table)) {
+		if (ptdev->soc_data && ptdev->soc_data->opp_clk_names) {
+			struct dev_pm_opp_config config = {
+				.clk_names = ptdev->soc_data->opp_clk_names,
+				.config_clks = dev_pm_opp_config_clks_simple,
+			};
+
+			ret = devm_pm_opp_set_config(dev, &config);
+			if (ret)
+				return ret;
+		}
+
 		ret = devm_pm_opp_set_regulators(dev, reg_names);
 		if (ret && ret != -ENODEV) {
 			if (ret != -EPROBE_DEFER)
@@ -231,8 +243,8 @@ int panthor_devfreq_init(struct panthor_device *ptdev)
 		return ret;
 	}
 
-	/* Find the fastest defined rate  */
-	opp = dev_pm_opp_find_freq_floor(dev, &freq);
+	/* Find the fastest defined core rate */
+	opp = dev_pm_opp_find_freq_floor_indexed(dev, &freq, 0);
 	if (IS_ERR(opp))
 		return PTR_ERR(opp);
 	ptdev->fast_rate = freq;

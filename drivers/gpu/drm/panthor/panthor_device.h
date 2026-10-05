@@ -43,6 +43,13 @@ struct panthor_soc_data {
 
 	/** @asn_hash: ASN_HASH values when asn_hash_enable is true. */
 	u32 asn_hash[3];
+
+	/**
+	 * @opp_clk_names: NULL-terminated names of the clocks the OPP table
+	 * scales, in opp-hz order. NULL if the OPP table only scales the core
+	 * clock.
+	 */
+	const char * const *opp_clk_names;
 };
 
 /**
