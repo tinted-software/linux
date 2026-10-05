@@ -4,6 +4,7 @@
 //              http://www.samsung.com
 
 #include <dt-bindings/regulator/samsung,s2mpg10-regulator.h>
+#include <dt-bindings/regulator/samsung,s2mpg12-regulator.h>
 #include <linux/bug.h>
 #include <linux/cleanup.h>
 #include <linux/err.h>
@@ -19,6 +20,7 @@
 #include <linux/mfd/samsung/core.h>
 #include <linux/mfd/samsung/s2mpg10.h>
 #include <linux/mfd/samsung/s2mpg11.h>
+#include <linux/mfd/samsung/s2mpg12.h>
 #include <linux/mfd/samsung/s2mps11.h>
 #include <linux/mfd/samsung/s2mps13.h>
 #include <linux/mfd/samsung/s2mps14.h>
@@ -1257,6 +1259,162 @@ static const struct s2mpg10_regulator_desc s2mpg11_regulators[] = {
 	s2mpg11_regulator_desc_ldo(15, "vinl3s", s2mpg11_ldo_vranges3)
 };
 
+/*
+ * S2MPG12 regulators have neither external control via PCTRLSELx nor ramp
+ * control via DVS_RAMPx / DVS_SYNC_CTRLx handled by this driver. A ramp delay
+ * for settling time calculations can be supplied via DT constraints.
+ */
+static const struct regulator_ops s2mpg12_reg_ops = {
+	.list_voltage = regulator_list_voltage_linear_range,
+	.map_voltage = regulator_map_voltage_linear_range,
+	.is_enabled = regulator_is_enabled_regmap,
+	.enable = regulator_enable_regmap,
+	.disable = regulator_disable_regmap,
+	.get_voltage_sel = regulator_get_voltage_sel_regmap,
+	.set_voltage_sel = regulator_set_voltage_sel_regmap,
+	.set_voltage_time_sel = regulator_set_voltage_time_sel,
+};
+
+#define S2MPG12_ENABLE_TIME_LDO 128
+#define S2MPG12_ENABLE_TIME_BUCK 130
+
+#define regulator_desc_s2mpg12_cmn(_name, _id, _vrange, _vsel_reg, _vsel_mask, \
+				   _en_reg, _en_mask, _en_time)                \
+	{                                                                      \
+		.name = _name,                                                 \
+		.of_match = of_match_ptr(_name),                               \
+		.regulators_node = of_match_ptr("regulators"),                 \
+		.id = _id,                                                     \
+		.ops = &s2mpg12_reg_ops,                                       \
+		.type = REGULATOR_VOLTAGE,                                     \
+		.owner = THIS_MODULE,                                          \
+		.linear_ranges = _vrange,                                      \
+		.n_linear_ranges = ARRAY_SIZE(_vrange),                        \
+		.n_voltages = _vrange##_count,                                 \
+		.vsel_reg = _vsel_reg,                                         \
+		.vsel_mask = _vsel_mask,                                       \
+		.enable_reg = _en_reg,                                         \
+		.enable_mask = _en_mask,                                       \
+		.enable_time = _en_time,                                       \
+	}
+
+/* BUCKs, 8-bit voltage selector in Bx_OUT1, enable bits in Bx_CTRL */
+#define s2mpg12_regulator_desc_buck(_num, _vrange, _en_mask)   \
+	[S2MPG12_BUCK##_num] = regulator_desc_s2mpg12_cmn(     \
+		"buck" #_num "m", S2MPG12_BUCK##_num, _vrange, \
+		S2MPG12_PMIC_B##_num##M_OUT1, GENMASK(7, 0),   \
+		S2MPG12_PMIC_B##_num##M_CTRL, _en_mask,        \
+		S2MPG12_ENABLE_TIME_BUCK)
+
+/* LDOs with voltage selector and enable bits in the same LxM_CTRL register */
+#define s2mpg12_regulator_desc_ldo(_num, _vrange, _vsel_mask, _en_mask) \
+	[S2MPG12_LDO##_num] = regulator_desc_s2mpg12_cmn(               \
+		"ldo" #_num "m", S2MPG12_LDO##_num, _vrange,            \
+		S2MPG12_PMIC_L##_num##M_CTRL, _vsel_mask,               \
+		S2MPG12_PMIC_L##_num##M_CTRL, _en_mask,                 \
+		S2MPG12_ENABLE_TIME_LDO)
+
+/* LDOs with enable bits in a shared LDO_CTRLx register */
+#define s2mpg12_regulator_desc_ldo_shared(_num, _vrange, _vsel_reg_sfx, \
+					  _en_reg, _en_mask)            \
+	[S2MPG12_LDO##_num] = regulator_desc_s2mpg12_cmn(               \
+		"ldo" #_num "m", S2MPG12_LDO##_num, _vrange,            \
+		S2MPG12_PMIC_L##_num##M_##_vsel_reg_sfx, GENMASK(6, 0), \
+		S2MPG12_PMIC_##_en_reg, _en_mask, S2MPG12_ENABLE_TIME_LDO)
+
+/* voltage range for s2mpg12 BUCK 1, 2, 3, 4, 5, 7, 8, 9, 10 */
+S2MPG10_VOLTAGE_RANGE(s2mpg12_buck, 1, 200000, 450000, 1300000, STEP_6_25_MV);
+
+/* voltage range for s2mpg12 BUCK 6 */
+S2MPG10_VOLTAGE_RANGE(s2mpg12_buck, 6, 200000, 450000, 1500000, STEP_6_25_MV);
+
+/* voltage range for s2mpg12 LDO 1, 3, 7, 13, 15, 19 */
+S2MPG10_VOLTAGE_RANGE(s2mpg12_ldo, 1, 300000, 450000, 950000, STEP_12_5_MV);
+
+/* voltage range for s2mpg12 LDO 2, 4, 9, 14, 18, 20, 23, 24, 25 */
+S2MPG10_VOLTAGE_RANGE(s2mpg12_ldo, 2, 700000, 1600000, 1950000, STEP_25_MV);
+
+/* voltage range for s2mpg12 LDO 5, 6, 8, 16, 28 */
+S2MPG10_VOLTAGE_RANGE(s2mpg12_ldo, 5, 725000, 725000, 1300000, STEP_12_5_MV);
+
+/* voltage range for s2mpg12 LDO 10 */
+S2MPG10_VOLTAGE_RANGE(s2mpg12_ldo, 10, 1800000, 1800000, 3350000, STEP_25_MV);
+
+/* voltage range for s2mpg12 LDO 11, 12, 17, 22 */
+S2MPG10_VOLTAGE_RANGE(s2mpg12_ldo, 11, 300000, 700000, 1300000, STEP_12_5_MV);
+
+/* voltage range for s2mpg12 LDO 21, 26, 27 */
+S2MPG10_VOLTAGE_RANGE(s2mpg12_ldo, 21, 1800000, 2500000, 3300000, STEP_25_MV);
+
+static const struct regulator_desc s2mpg12_regulators[] = {
+	s2mpg12_regulator_desc_buck(1, s2mpg12_buck_vranges1, GENMASK(7, 6)),
+	s2mpg12_regulator_desc_buck(2, s2mpg12_buck_vranges1, GENMASK(7, 6)),
+	s2mpg12_regulator_desc_buck(3, s2mpg12_buck_vranges1, GENMASK(7, 6)),
+	s2mpg12_regulator_desc_buck(4, s2mpg12_buck_vranges1, GENMASK(7, 6)),
+	s2mpg12_regulator_desc_buck(5, s2mpg12_buck_vranges1, GENMASK(7, 6)),
+	s2mpg12_regulator_desc_buck(6, s2mpg12_buck_vranges6, GENMASK(7, 6)),
+	s2mpg12_regulator_desc_buck(7, s2mpg12_buck_vranges1, GENMASK(7, 6)),
+	s2mpg12_regulator_desc_buck(8, s2mpg12_buck_vranges1, BIT(7)),
+	s2mpg12_regulator_desc_buck(9, s2mpg12_buck_vranges1, GENMASK(7, 6)),
+	s2mpg12_regulator_desc_buck(10, s2mpg12_buck_vranges1, GENMASK(7, 6)),
+	s2mpg12_regulator_desc_ldo(1, s2mpg12_ldo_vranges1, GENMASK(6, 0),
+				   BIT(7)),
+	s2mpg12_regulator_desc_ldo(2, s2mpg12_ldo_vranges2, GENMASK(5, 0),
+				   BIT(7)),
+	s2mpg12_regulator_desc_ldo(3, s2mpg12_ldo_vranges1, GENMASK(6, 0),
+				   BIT(7)),
+	s2mpg12_regulator_desc_ldo(4, s2mpg12_ldo_vranges2, GENMASK(5, 0),
+				   GENMASK(7, 6)),
+	s2mpg12_regulator_desc_ldo(5, s2mpg12_ldo_vranges5, GENMASK(5, 0),
+				   GENMASK(7, 6)),
+	s2mpg12_regulator_desc_ldo(6, s2mpg12_ldo_vranges5, GENMASK(5, 0),
+				   GENMASK(7, 6)),
+	s2mpg12_regulator_desc_ldo_shared(7, s2mpg12_ldo_vranges1, CTRL,
+					  LDO_CTRL1, GENMASK(1, 0)),
+	s2mpg12_regulator_desc_ldo(8, s2mpg12_ldo_vranges5, GENMASK(5, 0),
+				   GENMASK(7, 6)),
+	s2mpg12_regulator_desc_ldo(9, s2mpg12_ldo_vranges2, GENMASK(5, 0),
+				   GENMASK(7, 6)),
+	s2mpg12_regulator_desc_ldo(10, s2mpg12_ldo_vranges10, GENMASK(5, 0),
+				   GENMASK(7, 6)),
+	s2mpg12_regulator_desc_ldo_shared(11, s2mpg12_ldo_vranges11, CTRL1,
+					  LDO_CTRL1, GENMASK(3, 2)),
+	s2mpg12_regulator_desc_ldo_shared(12, s2mpg12_ldo_vranges11, CTRL1,
+					  LDO_CTRL1, GENMASK(5, 4)),
+	s2mpg12_regulator_desc_ldo_shared(13, s2mpg12_ldo_vranges1, CTRL1,
+					  LDO_CTRL1, GENMASK(7, 6)),
+	s2mpg12_regulator_desc_ldo(14, s2mpg12_ldo_vranges2, GENMASK(5, 0),
+				   GENMASK(7, 6)),
+	s2mpg12_regulator_desc_ldo_shared(15, s2mpg12_ldo_vranges1, CTRL1,
+					  LDO_CTRL2, GENMASK(1, 0)),
+	s2mpg12_regulator_desc_ldo(16, s2mpg12_ldo_vranges5, GENMASK(5, 0),
+				   GENMASK(7, 6)),
+	s2mpg12_regulator_desc_ldo_shared(17, s2mpg12_ldo_vranges11, CTRL,
+					  LDO_CTRL2, GENMASK(3, 2)),
+	s2mpg12_regulator_desc_ldo(18, s2mpg12_ldo_vranges2, GENMASK(5, 0),
+				   GENMASK(7, 6)),
+	s2mpg12_regulator_desc_ldo_shared(19, s2mpg12_ldo_vranges1, CTRL,
+					  LDO_CTRL2, GENMASK(5, 4)),
+	s2mpg12_regulator_desc_ldo(20, s2mpg12_ldo_vranges2, GENMASK(5, 0),
+				   GENMASK(7, 6)),
+	s2mpg12_regulator_desc_ldo(21, s2mpg12_ldo_vranges21, GENMASK(5, 0),
+				   BIT(7)),
+	s2mpg12_regulator_desc_ldo_shared(22, s2mpg12_ldo_vranges11, CTRL,
+					  LDO_CTRL2, GENMASK(7, 6)),
+	s2mpg12_regulator_desc_ldo(23, s2mpg12_ldo_vranges2, GENMASK(5, 0),
+				   GENMASK(7, 6)),
+	s2mpg12_regulator_desc_ldo(24, s2mpg12_ldo_vranges2, GENMASK(5, 0),
+				   BIT(7)),
+	s2mpg12_regulator_desc_ldo(25, s2mpg12_ldo_vranges2, GENMASK(5, 0),
+				   BIT(7)),
+	s2mpg12_regulator_desc_ldo(26, s2mpg12_ldo_vranges21, GENMASK(5, 0),
+				   GENMASK(7, 6)),
+	s2mpg12_regulator_desc_ldo(27, s2mpg12_ldo_vranges21, GENMASK(5, 0),
+				   BIT(7)),
+	s2mpg12_regulator_desc_ldo(28, s2mpg12_ldo_vranges5, GENMASK(5, 0),
+				   BIT(7)),
+};
+
 static const struct regulator_ops s2mps11_ldo_ops = {
 	.list_voltage		= regulator_list_voltage_linear,
 	.map_voltage		= regulator_map_voltage_linear,
@@ -2187,6 +2345,12 @@ static int s2mps11_pmic_probe(struct platform_device *pdev)
 		s2mpg1x_regulators = s2mpg11_regulators;
 		BUILD_BUG_ON(ARRAY_SIZE(s2mpg11_regulators) > S2MPS_REGULATOR_MAX);
 		break;
+	case S2MPG12:
+		rdev_num = ARRAY_SIZE(s2mpg12_regulators);
+		regulators = s2mpg12_regulators;
+		BUILD_BUG_ON(ARRAY_SIZE(s2mpg12_regulators) >
+			     S2MPS_REGULATOR_MAX);
+		break;
 	case S2MPS11X:
 		rdev_num = ARRAY_SIZE(s2mps11_regulators);
 		regulators = s2mps11_regulators;
@@ -2268,6 +2432,7 @@ static int s2mps11_pmic_probe(struct platform_device *pdev)
 static const struct platform_device_id s2mps11_pmic_id[] = {
 	{ .name = "s2mpg10-regulator", .driver_data = S2MPG10 },
 	{ .name = "s2mpg11-regulator", .driver_data = S2MPG11 },
+	{ .name = "s2mpg12-regulator", .driver_data = S2MPG12 },
 	{ .name = "s2mps11-regulator", .driver_data = S2MPS11X },
 	{ .name = "s2mps13-regulator", .driver_data = S2MPS13X },
 	{ .name = "s2mps14-regulator", .driver_data = S2MPS14X },
