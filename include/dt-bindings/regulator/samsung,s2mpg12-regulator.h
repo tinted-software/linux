@@ -1,0 +1,52 @@
+/* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
+/*
+ * Device Tree binding constants for the Samsung S2MPG12 PMIC regulators
+ */
+
+#ifndef _DT_BINDINGS_REGULATOR_SAMSUNG_S2MPG12_H
+#define _DT_BINDINGS_REGULATOR_SAMSUNG_S2MPG12_H
+
+/*
+ * Regulator IDs of the S2MPG12 main PMIC. buckNm / ldoNm in the device tree
+ * correspond to S2MPG12_BUCKN / S2MPG12_LDON.
+ */
+#define S2MPG12_BUCK1 0
+#define S2MPG12_BUCK2 1
+#define S2MPG12_BUCK3 2
+#define S2MPG12_BUCK4 3
+#define S2MPG12_BUCK5 4
+#define S2MPG12_BUCK6 5
+#define S2MPG12_BUCK7 6
+#define S2MPG12_BUCK8 7
+#define S2MPG12_BUCK9 8
+#define S2MPG12_BUCK10 9
+#define S2MPG12_LDO1 10
+#define S2MPG12_LDO2 11
+#define S2MPG12_LDO3 12
+#define S2MPG12_LDO4 13
+#define S2MPG12_LDO5 14
+#define S2MPG12_LDO6 15
+#define S2MPG12_LDO7 16
+#define S2MPG12_LDO8 17
+#define S2MPG12_LDO9 18
+#define S2MPG12_LDO10 19
+#define S2MPG12_LDO11 20
+#define S2MPG12_LDO12 21
+#define S2MPG12_LDO13 22
+#define S2MPG12_LDO14 23
+#define S2MPG12_LDO15 24
+#define S2MPG12_LDO16 25
+#define S2MPG12_LDO17 26
+#define S2MPG12_LDO18 27
+#define S2MPG12_LDO19 28
+#define S2MPG12_LDO20 29
+#define S2MPG12_LDO21 30
+#define S2MPG12_LDO22 31
+#define S2MPG12_LDO23 32
+#define S2MPG12_LDO24 33
+#define S2MPG12_LDO25 34
+#define S2MPG12_LDO26 35
+#define S2MPG12_LDO27 36
+#define S2MPG12_LDO28 37
+
+#endif /* _DT_BINDINGS_REGULATOR_SAMSUNG_S2MPG12_H */

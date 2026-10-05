@@ -1,0 +1,76 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mfd/samsung,s2mpg12-pmic.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Samsung S2MPG12 Power Management IC
+
+maintainers:
+  - Theo Paris <theo@theoparis.com>
+
+description: |
+  This is part of the device tree bindings for the S2MPG12 Power Management IC
+  (PMIC).
+
+  The Samsung S2MPG12 is a Power Management IC for mobile applications with buck
+  converters, various LDOs, power meters, RTC and additional GPIO interfaces and
+  is typically complemented by a S2MPG13 PMIC in a main/sub configuration as the
+  main PMIC.
+
+properties:
+  compatible:
+    const: samsung,s2mpg12-pmic
+
+  interrupts:
+    maxItems: 1
+
+  regulators:
+    type: object
+    $ref: /schemas/regulator/samsung,s2mpg12-regulator.yaml
+    description:
+      List of child nodes that specify the regulators.
+
+  wakeup-source: true
+
+required:
+  - compatible
+  - interrupts
+  - regulators
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    pmic {
+        compatible = "samsung,s2mpg12-pmic";
+        interrupts-extended = <&gpa0 6 IRQ_TYPE_LEVEL_LOW>;
+        pinctrl-names = "default";
+        pinctrl-0 = <&pmic_int>;
+        wakeup-source;
+
+        regulators {
+            buck1m {
+                regulator-name = "vdd_mif";
+                regulator-min-microvolt = <450000>;
+                regulator-max-microvolt = <1300000>;
+                regulator-ramp-delay = <6250>;
+            };
+
+            ldo1m {
+                regulator-name = "vdd_alive";
+                regulator-min-microvolt = <450000>;
+                regulator-max-microvolt = <950000>;
+                regulator-always-on;
+            };
+
+            ldo27m {
+                regulator-name = "vdd_disp_vci";
+                regulator-min-microvolt = <3025000>;
+                regulator-max-microvolt = <3025000>;
+            };
+        };
+    };
