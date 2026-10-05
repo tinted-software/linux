@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/power/google,gs201-power-domain.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Google GS201 PMU power domains
+
+maintainers:
+  - Theo Paris <theo@theoparis.com>
+
+description: |
+  Power domains of the Google Tensor G2 controlled through the PMU. Each
+  domain has a CONFIGURATION register in the PMU (bit 0 powers the domain)
+  followed by a STATUS register. A domain may be a child of another one.
+
+allOf:
+  - $ref: power-domain.yaml#
+
+properties:
+  compatible:
+    const: google,gs201-power-domain
+
+  reg:
+    maxItems: 1
+    description:
+      The CONTROLLER_OPTION register of the domain's CMU. Bit 24 is cleared
+      before the domain is powered down. Omit if the domain has none.
+
+  "#power-domain-cells":
+    const: 0
+
+  power-domains:
+    maxItems: 1
+    description: Parent domain.
+
+  google,pmu-syscon:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: The PMU syscon.
+
+  google,pmu-offset:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Offset of the domain's CONFIGURATION register in the PMU; the STATUS
+      register follows at +4.
+
+  google,tzpc-smc:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Argument of the secure monitor call that saves and restores the TZPC
+      state of the domain around a power cycle. Omit if not needed.
+
+required:
+  - compatible
+  - "#power-domain-cells"
+  - google,pmu-syscon
+  - google,pmu-offset
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    power-domain@27f00800 {
+        compatible = "google,gs201-power-domain";
+        reg = <0x27f00800 0x4>;
+        #power-domain-cells = <0>;
+        google,pmu-syscon = <&pmu_system_controller>;
+        google,pmu-offset = <0x1e00>;
+        google,tzpc-smc = <0x27f10204>;
+    };
+
+    power-domain-cores {
+        compatible = "google,gs201-power-domain";
+        #power-domain-cells = <0>;
+        power-domains = <&pd_top>;
+        google,pmu-syscon = <&pmu_system_controller>;
+        google,pmu-offset = <0x2000>;
+    };
