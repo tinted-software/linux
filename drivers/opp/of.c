@@ -1521,7 +1521,7 @@ static bool _of_has_opp_microwatt_property(struct device *dev)
 
 	/* Check if at least one OPP has needed property */
 	struct dev_pm_opp *opp __free(put_opp) =
-		dev_pm_opp_find_freq_ceil(dev, &freq);
+		dev_pm_opp_find_freq_ceil_indexed(dev, &freq, 0);
 
 	if (IS_ERR(opp))
 		return false;
