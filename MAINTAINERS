@@ -8154,6 +8154,13 @@ S:	Maintained
 T:	git https://gitlab.freedesktop.org/drm/misc/kernel.git
 F:	drivers/gpu/drm/tiny/gm12u320.c
 
+DRM DRIVER FOR GOOGLE GS201 DISPLAY
+M:	Theo Paris <theo@theoparis.com>
+L:	dri-devel@lists.freedesktop.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/display/google,gs201-*.yaml
+F:	drivers/gpu/drm/gs201/
+
 DRM DRIVER FOR HIMAX HX8394 MIPI-DSI LCD panels
 M:	Ondrej Jirman <megi@xff.cz>
 M:	Javier Martinez Canillas <javierm@redhat.com>
@@ -8478,6 +8485,12 @@ M:	David Heidelberg <david@ixit.cz>
 S:	Maintained
 F:	Documentation/devicetree/bindings/display/panel/samsung,s6e3fc2x01.yaml
 F:	drivers/gpu/drm/panel/panel-samsung-s6e3fc2x01.c
+
+DRM DRIVER FOR SAMSUNG S6E3FC5 PANELS
+M:	Theo Paris <theo@theoparis.com>
+S:	Maintained
+F:	Documentation/devicetree/bindings/display/panel/samsung,s6e3fc5.yaml
+F:	drivers/gpu/drm/panel/panel-samsung-s6e3fc5.c
 
 DRM DRIVER FOR SAMSUNG S6E3HA8 PANELS
 M:	Dzmitry Sankouski <dsankouski@gmail.com>
@@ -11158,16 +11171,21 @@ S:	Maintained
 P:	Documentation/process/maintainer-soc-clean-dts.rst
 C:	irc://irc.oftc.net/pixel6-kernel-dev
 F:	Documentation/devicetree/bindings/clock/google,gs101-clock.yaml
+F:	Documentation/devicetree/bindings/clock/google,gs201-clock.yaml
 F:	Documentation/devicetree/bindings/phy/google,lga-usb-phy.yaml
+F:	Documentation/devicetree/bindings/power/google,gs201-power-domain.yaml
 F:	Documentation/devicetree/bindings/soc/google/google,gs101-pmu-intr-gen.yaml
 F:	Documentation/devicetree/bindings/usb/google,lga-dwc3.yaml
 F:	arch/arm64/boot/dts/exynos/google/
 F:	drivers/clk/samsung/clk-gs101.c
+F:	drivers/clk/samsung/clk-gs201.c
 F:	drivers/phy/phy-google-usb.c
 F:	drivers/soc/samsung/gs101-pmu.c
 F:	drivers/phy/samsung/phy-gs101-ufs.c
+F:	drivers/pmdomain/samsung/gs201-pm-domains.c
 F:	drivers/usb/dwc3/dwc3-google.c
 F:	include/dt-bindings/clock/google,gs101*
+F:	include/dt-bindings/clock/google,gs201*
 K:	[gG]oogle.?[tT]ensor
 
 GPD FAN DRIVER
