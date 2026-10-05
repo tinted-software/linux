@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config DRM_GS201_DPU
+	tristate "Google Tensor GS201 display controller (DECON/DPP)"
+	depends on DRM && OF && (ARCH_EXYNOS || COMPILE_TEST)
+	select DRM_CLIENT_SELECTION
+	select DRM_GEM_DMA_HELPER
+	select DRM_KMS_HELPER
+	help
+	  Display controller driver for the Google Tensor G2 (GS201), as found
+	  in the Pixel 7 and 7a. Initially this adopts the DECON/DPP/DSIM
+	  pipeline and command-mode panel left running by the bootloader,
+	  scanning out a single XRGB8888 plane with frame-done driven page
+	  flips.
+
+config DRM_GS201_DSIM
+	tristate "Google Tensor GS201 MIPI DSI host"
+	depends on DRM && OF && (ARCH_EXYNOS || COMPILE_TEST)
+	select DRM_MIPI_DSI
+	select DRM_PANEL_BRIDGE
+	help
+	  MIPI DSI host controller (DSIM) of the Google Tensor G2. This stage
+	  adopts the link, clocks and D-PHY configured by the bootloader and
+	  only provides the command FIFO interface to the panel, which the
+	  panel driver uses for brightness and display on/off.
