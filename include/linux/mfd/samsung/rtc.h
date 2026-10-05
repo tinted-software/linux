@@ -72,6 +72,7 @@ enum s2mps_rtc_reg {
 	S2MPS_RTC_REG_MAX,
 };
 
+/* Also describes the register compatible RTC block of the S2MPG12 */
 enum s2mpg10_rtc_reg {
 	S2MPG10_RTC_CTRL,
 	S2MPG10_RTC_UPDATE,
