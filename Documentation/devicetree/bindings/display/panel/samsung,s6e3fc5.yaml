@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/display/panel/samsung,s6e3fc5.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Samsung S6E3FC5 AMOLED DSI panel
+
+maintainers:
+  - Theo Paris <theo@theoparis.com>
+
+description: |
+  1080x2400 command-mode DSI AMOLED panel with display stream compression,
+  used in the Google Pixel 7a.
+
+allOf:
+  - $ref: panel-common.yaml#
+
+properties:
+  compatible:
+    const: samsung,s6e3fc5
+
+  reg:
+    maxItems: 1
+
+  vci-supply:
+    description: Panel analog supply
+
+  vddi-supply:
+    description: Panel interface supply
+
+required:
+  - compatible
+  - reg
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    dsi {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        panel@0 {
+            compatible = "samsung,s6e3fc5";
+            reg = <0>;
+            reset-gpios = <&gpa7 1 GPIO_ACTIVE_LOW>;
+            vci-supply = <&vci_reg>;
+            vddi-supply = <&vddi_reg>;
+        };
+    };
