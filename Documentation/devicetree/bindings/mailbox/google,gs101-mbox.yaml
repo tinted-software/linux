@@ -22,6 +22,7 @@ properties:
   compatible:
     enum:
       - google,gs101-mbox
+      - google,gs201-mbox
       - samsung,exynos850-mbox
 
   reg:
@@ -44,10 +45,24 @@ properties:
 required:
   - compatible
   - reg
-  - clocks
-  - clock-names
   - interrupts
   - '#mbox-cells'
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          not:
+            contains:
+              const: google,gs201-mbox
+    then:
+      required:
+        - clocks
+        - clock-names
+    else:
+      properties:
+        clocks: false
+        clock-names: false
 
 additionalProperties: false
 
