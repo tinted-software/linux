@@ -819,10 +819,25 @@ impl Runtime {
             Work::Compute(compute) => compute.uma_completed()? == compute.uma_submitted(),
             _ => true,
         };
+        let witnesses = if snapshot_after_deadline || active.late_fragment_repoll {
+            match &mut active.work {
+                Work::Render(render) if pipe_index == 1 &&
+                    inner.device.firmware().board.name == "J613" => {
+                    let ta = render.notifier()?.lock().stamps(0)?;
+                    late_fragment::Witnesses {
+                        expected: render.stamp(), firmware, user: shared, ta,
+                        timestamps: render.timestamps()?, queue_done, pipe_done,
+                        private_done,
+                    }
+                }
+                _ => late_fragment::Witnesses::default(),
+            }
+        } else { late_fragment::Witnesses::default() };
         if status[0] == active.work.stamp() as u64
             && status[1] == active.work.stamp() as u64
             && (pipe_index != 2 || (status[2] != 0 && status[3] > status[2]))
-            && queue_done && pipe_done && private_done {
+            && queue_done && pipe_done && private_done
+            && (!active.late_fragment_repoll || late_fragment::reconciled(witnesses)) {
             if active.late_fragment_repoll {
                 dev_info!(inner.drm.as_ref(), "G16G: late fragment reconciled job={} expected={:#x}; full retirement witnesses passed\n",
                     active.packet.id, active.work.stamp());
@@ -1089,18 +1104,6 @@ impl Runtime {
             // Give only this exact signature one bounded re-poll window. Each
             // poll revalidates the witnesses; no CPU stamp store, queue reset,
             // owner release, error fence, or firmware command is performed.
-            let witnesses = match &mut active.work {
-                Work::Render(render) if pipe_index == 1 &&
-                    inner.device.firmware().board.name == "J613" => {
-                    let ta = render.notifier()?.lock().stamps(0)?;
-                    late_fragment::Witnesses {
-                        expected: render.stamp(), firmware, user: shared, ta,
-                        timestamps: render.timestamps()?, queue_done, pipe_done,
-                        private_done,
-                    }
-                }
-                _ => late_fragment::Witnesses::default(),
-            };
             if late_fragment::repoll(witnesses, active.started.elapsed().as_nanos()) {
                 if !active.late_fragment_repoll {
                     active.late_fragment_repoll = true;
