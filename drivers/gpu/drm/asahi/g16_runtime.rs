@@ -226,6 +226,9 @@ impl Inner {
         Ok(())
     }
 }
+#[path = "g16_late_fragment.rs"]
+mod late_fragment;
+
 struct Active {
     packet: Arc<crate::g16_submit::Packet>,
     bank: usize,
@@ -237,6 +240,7 @@ struct Active {
     preparation_ns: i64,
     published: kernel::time::Instant<kernel::time::Monotonic>,
     publication_tick: u64,
+    late_fragment_repoll: bool,
 }
 
 pub(crate) struct Runtime {
@@ -666,7 +670,7 @@ impl Runtime {
         inner.device.check_pstate()?;
         Ok(Active { packet, bank: batch_offset as usize / COMPUTE_DEPTH, work, index, queue_next:[0;3],pipe_next:[0;3],
             preparation_ns: preparing.elapsed().as_nanos(),
-            published: kernel::time::Instant::<kernel::time::Monotonic>::now(), publication_tick: 0,
+            published: kernel::time::Instant::<kernel::time::Monotonic>::now(), publication_tick: 0, late_fragment_repoll: false,
             started:kernel::time::Instant::<kernel::time::Monotonic>::now() })
     }
 
@@ -819,6 +823,10 @@ impl Runtime {
             && status[1] == active.work.stamp() as u64
             && (pipe_index != 2 || (status[2] != 0 && status[3] > status[2]))
             && queue_done && pipe_done && private_done {
+            if active.late_fragment_repoll {
+                dev_info!(inner.drm.as_ref(), "G16G: late fragment reconciled job={} expected={:#x}; full retirement witnesses passed\n",
+                    active.packet.id, active.work.stamp());
+            }
             if let Work::Render(render) = &mut active.work {
                 if crate::debug::debug_enabled(crate::debug::DebugFlags::KTraceCh) {
                     dev_info!(inner.drm.as_ref(),"G16G: userspace render stage {:?} retired stamps={:x?} queue={:?}\n",render.stage,status,queue);
@@ -1075,6 +1083,32 @@ impl Runtime {
             inner.summary.wait_phases[pipe_index][phase] += 1;
         }
         if snapshot_after_deadline {
+            // The 25G83 dump showed execution witnesses complete with just the
+            // fragment firmware stamp one increment late. This is NOT proof of
+            // DMA retirement: firmware barriers still depend on that stamp.
+            // Give only this exact signature one bounded re-poll window. Each
+            // poll revalidates the witnesses; no CPU stamp store, queue reset,
+            // owner release, error fence, or firmware command is performed.
+            let witnesses = match &mut active.work {
+                Work::Render(render) if pipe_index == 1 &&
+                    inner.device.firmware().board.name == "J613" => {
+                    let ta = render.notifier()?.lock().stamps(0)?;
+                    late_fragment::Witnesses {
+                        expected: render.stamp(), firmware, user: shared, ta,
+                        timestamps: render.timestamps()?, queue_done, pipe_done,
+                        private_done,
+                    }
+                }
+                _ => late_fragment::Witnesses::default(),
+            };
+            if late_fragment::repoll(witnesses, active.started.elapsed().as_nanos()) {
+                if !active.late_fragment_repoll {
+                    active.late_fragment_repoll = true;
+                    dev_warn!(inner.drm.as_ref(), "G16G: late fragment re-poll job={} expected={:#x} fw={:#x} user={:#x}; retaining all DMA owners, deadline=4s\n",
+                        active.packet.id, active.work.stamp(), firmware, shared);
+                }
+                return Ok(false);
+            }
             dev_err!(inner.drm.as_ref(), "G16G: userspace GPU timeout job={} status={:x?} queue={:?} pipe={:?}\n",
                 active.packet.id, status, queue, pipe);
             dev_err!(inner.drm.as_ref(), "G16G: retirement witness expected={:#x} notifier_fw={:#x} notifier_user={:#x} queue_done={} pipe_done={} private_done={} alone={}\n",
