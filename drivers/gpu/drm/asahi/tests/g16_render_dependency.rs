@@ -21,8 +21,8 @@ fn native_start_and_command_counters_agree_without_truncation() {
     ] {
         let a = Args {
             command:p,sku:p+0x4000,queue:p+0x8000,stats:p+0xc000,
-            pb_slot:p,manager:p,pb_aux:p,notifier:p,shared_stamp:p,
-            stamp_address:p,uma:p,uma_aux:0x7100010000,timestamp_storage:p+0x600,
+            pb_slot:p,manager:p,pb_aux:p,notifier:p,user_stamp:p,
+            fw_stamp:p,uma:p,uma_aux:0x7100010000,timestamp_storage:p+0x600,
             context:2,generation:1,counter,uuid:42,stamp:0x100,event_slot:0x70,
             fragment_slot:0x71,fragment_stamp:0x432100,pb_id:0,pass_id:0,
         };
@@ -162,4 +162,51 @@ fn optional_timestamp_removal_preserves_native_wfi_and_finalizers() {
         assert!(g16_compute::omit_timestamps(&mut malformed,start,total,restart).is_err());
         assert_eq!(malformed,before);
     }
+}
+
+#[test]
+fn render_completion_producers_match_compute_and_native_jobmeta() {
+    // c000/25G83 TEXT2294c retains JobMeta; TEXT23b94 loads its first
+    // pointer and TEXT23bc8 stores the shared completion after cache flush.
+    // FinalizeVertex/Fragment must instead store the second/internal pointer,
+    // also used by setupBarrierCommand. Distinct cells catch the D3i inversion.
+    use g16_render::Stage;
+    use g16_render_command::{Args, layout};
+    let p = 0xfffffc2012340000;
+    let user = p + 0x638;
+    let internal = p + 0x630;
+    for stage in [Stage::Tiling, Stage::Fragment] {
+        let a = Args { command:p+0x4000, sku:p+0x8000, queue:p+0xc000,
+            stats:p+0x10000, pb_slot:p+0x14000, manager:p+0x18000,
+            pb_aux:p+0x1c000, notifier:p, user_stamp:user, fw_stamp:internal,
+            uma:p+0x20000, uma_aux:0x7100010000, timestamp_storage:p+0x24000,
+            context:11, generation:1, counter:437714, uuid:42,
+            stamp:0xaa5d200, event_slot:0x70, fragment_slot:0x71,
+            fragment_stamp:0xaa5d200, pb_id:0, pass_id:0 };
+        let mut command = [0;0xca0];
+        let mut sequence = [0;0x800];
+        g16_render_command::encode(&mut command,&mut sequence,stage,a).unwrap();
+        let wire = layout(stage);
+        assert_eq!(&command[wire.job_meta..wire.job_meta+8], &user.to_le_bytes());
+        assert_eq!(&command[wire.job_meta+8..wire.job_meta+16], &internal.to_le_bytes());
+        let f = wire.finalize + if stage == Stage::Tiling {0x48} else {0xc};
+        assert_eq!(&sequence[f..f+8], &internal.to_le_bytes());
+        let mut dependency = [0;0x40];
+        g16_render_command::render_dependency(&mut dependency,internal,0x71,a.stamp,a.stamp+0x100).unwrap();
+        assert_eq!(&dependency[4..12], &internal.to_le_bytes());
+        assert_ne!(&sequence[f..f+8], &command[wire.job_meta..wire.job_meta+8]);
+        // Every relocated/fanout sequence keeps its internal finalizer cell.
+        if stage == Stage::Fragment {
+            for n in 1..=8 {
+                let mut copy = sequence;
+                g16_render_command::fragment_timestamp_copies(&mut copy,&[p+0x28000;8][..n]).unwrap();
+                assert_eq!(&copy[f+n*0x4c..f+n*0x4c+8], &internal.to_le_bytes());
+            }
+        }
+    }
+    // This source-level check covers the production owner-to-wire boundary,
+    // which pure encoder tests with fabricated Args cannot cover themselves.
+    let owner = include_str!("../g16_render_job.rs");
+    assert!(owner.contains("user_stamp:notifications[i].stamp"));
+    assert!(owner.contains("fw_stamp:notifications[i].fw_stamp"));
 }

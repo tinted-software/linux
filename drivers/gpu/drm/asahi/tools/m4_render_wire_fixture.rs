@@ -13,7 +13,7 @@ fn main() {
     for stage in [g16_render::Stage::Tiling, g16_render::Stage::Fragment] {
         let mut a = Args { command:b, sku:b+0x4000, queue:b+0x8000, stats:b+0xc004,
             pb_slot:b+0x10000, manager:b+0x14000, pb_aux:b+0x18000, notifier:b+0x1c000,
-            shared_stamp:b+0x20000, stamp_address:b+0x24000, uma:b+0x28000,
+            user_stamp:b+0x20000, fw_stamp:b+0x24000, uma:b+0x28000,
             uma_aux:0x7003000000, context:3, generation:2, counter:0x100000001,
             timestamp_storage:b+0x30000, uuid:0x1234, stamp:0x300, event_slot:0x71,
             fragment_slot:0x71, fragment_stamp:0x300, pb_id:2, pass_id:4 };

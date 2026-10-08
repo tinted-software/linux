@@ -9,8 +9,8 @@ fn moves_finalize_preserving_restart_and_all_destinations() {
         let base = 0xffff_fc20_0100_0000;
         let args = wire::Args {command:base, sku:base+0x4000, queue:base+0x8000,
             stats:base+0xc000, pb_slot:base+0x10000, manager:base+0x14000,
-            pb_aux:base+0x18000, notifier:base+0x1c000, shared_stamp:base+0x20000,
-            stamp_address:base+0x24000, uma:base+0x28000, uma_aux:0x7003000000,
+            pb_aux:base+0x18000, notifier:base+0x1c000, user_stamp:base+0x20000,
+            fw_stamp:base+0x24000, uma:base+0x28000, uma_aux:0x7003000000,
             timestamp_storage:base+0x30000, context:3, generation:2, counter:42,
             uuid:1234, stamp:0x300, event_slot:0x71, fragment_slot:0x71,
             fragment_stamp:0x300, pb_id:0, pass_id:0};

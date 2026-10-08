@@ -38,7 +38,7 @@ fn main() {
     let variant:u64=std::env::args().nth(1).unwrap().parse().unwrap();let b=0xfffffc2040000000+variant*0x100000;
     let mut r=Render{commands:[Buffer::new(b),Buffer::new(b+0x4000)],sequences:[Buffer::new(b+0x8000),Buffer::new(b+0xc000)],metadata:Buffer::new(b+0x10000),uma:Buffer::new(b+0x14000),stage:Stage::Tiling,parameters:Parameters{manager:Buffer::new(b+0x18000)},compute_dependency:false,init_parameters:variant%2==0,stamp:0x100+variant as u32*0x100};
     for (i,stage) in [Stage::Tiling,Stage::Fragment].into_iter().enumerate() {
-        let a=wire::Args{command:r.commands[i].va(),sku:r.sequences[i].va(),queue:b+0x20000,stats:b+0x24000,pb_slot:r.metadata.va(),manager:b+0x18000,pb_aux:b+0x10100,notifier:b+0x28000,shared_stamp:b+0x2c000,stamp_address:b+0x30000,uma:r.uma.va(),uma_aux:0x7100000000,timestamp_storage:b+0x10600+i as u64*0x20,context:1,generation:1,counter:variant+1,uuid:variant as u32,stamp:r.stamp,event_slot:0x70+i as u32,fragment_slot:0x71,fragment_stamp:r.stamp,pb_id:2,pass_id:0};
+        let a=wire::Args{command:r.commands[i].va(),sku:r.sequences[i].va(),queue:b+0x20000,stats:b+0x24000,pb_slot:r.metadata.va(),manager:b+0x18000,pb_aux:b+0x10100,notifier:b+0x28000,user_stamp:b+0x2c000,fw_stamp:b+0x30000,uma:r.uma.va(),uma_aux:0x7100000000,timestamp_storage:b+0x10600+i as u64*0x20,context:1,generation:1,counter:variant+1,uuid:variant as u32,stamp:r.stamp,event_slot:0x70+i as u32,fragment_slot:0x71,fragment_stamp:r.stamp,pb_id:2,pass_id:0};
         wire::encode(&mut r.commands[i].bytes,&mut r.sequences[i].bytes,stage,a).unwrap();
     }
     let mut out=std::io::stdout();r.snapshot(&mut out);

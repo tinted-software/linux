@@ -49,6 +49,10 @@ struct Inner {
     messages_at_wait: u64,
     waits: u64,
     late_retirements: u64,
+    stamp_episodes: u64,
+    stamp_resolved: u64,
+    pstate_transitions: u64,
+    last_pstate: Option<u32>,
     wait_timeouts: u64,
     summary: SubmitSummary,
     last_retired: Option<(u64, i64)>,
@@ -241,6 +245,7 @@ struct Active {
     published: kernel::time::Instant<kernel::time::Monotonic>,
     publication_tick: u64,
     late_fragment_repoll: bool,
+    stamp_episode: Option<(u64, i64)>,
 }
 
 pub(crate) struct Runtime {
@@ -670,7 +675,7 @@ impl Runtime {
         inner.device.check_pstate()?;
         Ok(Active { packet, bank: batch_offset as usize / COMPUTE_DEPTH, work, index, queue_next:[0;3],pipe_next:[0;3],
             preparation_ns: preparing.elapsed().as_nanos(),
-            published: kernel::time::Instant::<kernel::time::Monotonic>::now(), publication_tick: 0, late_fragment_repoll: false,
+            published: kernel::time::Instant::<kernel::time::Monotonic>::now(), publication_tick: 0, late_fragment_repoll: false, stamp_episode: None,
             started:kernel::time::Instant::<kernel::time::Monotonic>::now() })
     }
 
@@ -759,6 +764,10 @@ impl Runtime {
         if !inner.state.healthy() || !inner.config.ready()? { return Err(EIO); }
         let pstate = inner.device.check_pstate()?;
         inner.config.observe_thermal_state(&inner.drm, pstate);
+        if inner.last_pstate.is_some_and(|previous| previous != pstate) {
+            inner.pstate_transitions += 1;
+        }
+        inner.last_pstate = Some(pstate);
         if crate::debug::debug_enabled(crate::debug::DebugFlags::SubmitSummary) {
             inner.summary.pstate_samples[pstate as usize] += 1;
         }
@@ -833,11 +842,46 @@ impl Runtime {
                 _ => late_fragment::Witnesses::default(),
             }
         } else { late_fragment::Witnesses::default() };
+        // Observe both producers before the watchdog, including episodes which
+        // resolve normally. This detector never substitutes for retirement.
+        // The internal stamp is written by Finalize; the shared user stamp is
+        // coalesced by the ready notifier after cache maintenance. D3i wired
+        // them in reverse. Do not classify a partially executing pass as late.
+        if pipe_index == 1 && inner.device.firmware().board.name == "J613" {
+            let complete = status[..2].iter().all(|s| *s == active.work.stamp() as u64);
+            if !complete && active.stamp_episode.is_none() && queue_done && pipe_done && private_done {
+                if let Work::Render(render) = &mut active.work {
+                    let ta = render.notifier()?.lock().stamps(0)?;
+                    if ta.iter().all(|s| stamp_reached(*s, render.stamp())) &&
+                        render.timestamps()?.iter().all(|[start, end]| *start != 0 && end > start) &&
+                        (stamp_reached(firmware, render.stamp()) || stamp_reached(shared, render.stamp())) {
+                        inner.stamp_episodes += 1;
+                        let episode = inner.stamp_episodes;
+                        active.stamp_episode = Some((episode, active.started.elapsed().as_nanos()));
+                        if episode <= 8 || episode % 64 == 0 {
+                            dev_info!(inner.drm.as_ref(), "G16G: late stamp episode={} job={} expected={:#x} fw={:#x} user={:#x} fw_lag={:#x} user_lag={:#x} alone={} pstate={} transitions={} messages={}; all execution witnesses complete, owners retained\n",
+                                episode, active.packet.id, render.stamp(), firmware, shared,
+                                render.stamp().wrapping_sub(firmware), render.stamp().wrapping_sub(shared),
+                                alone, pstate, inner.pstate_transitions,
+                                inner.state.event_messages.load(core::sync::atomic::Ordering::Acquire));
+                        }
+                    }
+                }
+            }
+        }
         if status[0] == active.work.stamp() as u64
             && status[1] == active.work.stamp() as u64
             && (pipe_index != 2 || (status[2] != 0 && status[3] > status[2]))
             && queue_done && pipe_done && private_done
             && (!active.late_fragment_repoll || late_fragment::reconciled(witnesses)) {
+            if let Some((episode, since)) = active.stamp_episode {
+                inner.stamp_resolved += 1;
+                if episode <= 8 || episode % 64 == 0 {
+                    dev_info!(inner.drm.as_ref(), "G16G: late stamp resolved episode={} job={} observed_ns={} resolved_total={} pstate={} transitions={}; full retirement witnesses passed\n",
+                        episode, active.packet.id, active.started.elapsed().as_nanos().saturating_sub(since),
+                        inner.stamp_resolved, pstate, inner.pstate_transitions);
+                }
+            }
             if active.late_fragment_repoll {
                 dev_info!(inner.drm.as_ref(), "G16G: late fragment reconciled job={} expected={:#x}; full retirement witnesses passed\n",
                     active.packet.id, active.work.stamp());
@@ -1112,6 +1156,9 @@ impl Runtime {
                 }
                 return Ok(false);
             }
+            dev_err!(inner.drm.as_ref(), "G16G: stamp episode totals observed={} resolved={} pstate={} transitions={} messages={}\n",
+                inner.stamp_episodes, inner.stamp_resolved, pstate, inner.pstate_transitions,
+                inner.state.event_messages.load(core::sync::atomic::Ordering::Acquire));
             dev_err!(inner.drm.as_ref(), "G16G: userspace GPU timeout job={} status={:x?} queue={:?} pipe={:?}\n",
                 active.packet.id, status, queue, pipe);
             dev_err!(inner.drm.as_ref(), "G16G: retirement witness expected={:#x} notifier_fw={:#x} notifier_user={:#x} queue_done={} pipe_done={} private_done={} alone={}\n",
@@ -1216,7 +1263,7 @@ impl Runtime {
                 None
             }
         };
-        Ok(Self { inner: ManuallyDrop::new(Inner { transport, state, queue, compute_queue, fragment_queue, queue_context, fragment_registered:false, retired_renders:KVec::new(),retired_computes:KVec::new(), idle_caches:crate::g16_owner_cache::Registry::new(), compute, config, uat, drm, device, generation: 0, gpu_pending: false, #[cfg(CONFIG_DEV_COREDUMP)] fault_captured: false, #[cfg(CONFIG_DEV_COREDUMP)] fault_reserve, busy_since_ns: None, command_label: 1, render_stamp: 0, compute_stamp: crate::g16_compute::STAMP, inflight: KVec::new(), pending: KVec::new(), messages_at_wait: 0, waits: 0, late_retirements: 0, wait_timeouts: 0, last_retired: None, last_gpu_end: None, summary: SubmitSummary { since_ns: <kernel::time::Monotonic as kernel::time::ClockSource>::ktime_get(), ..Default::default() } }) })
+        Ok(Self { inner: ManuallyDrop::new(Inner { transport, state, queue, compute_queue, fragment_queue, queue_context, fragment_registered:false, retired_renders:KVec::new(),retired_computes:KVec::new(), idle_caches:crate::g16_owner_cache::Registry::new(), compute, config, uat, drm, device, generation: 0, gpu_pending: false, #[cfg(CONFIG_DEV_COREDUMP)] fault_captured: false, #[cfg(CONFIG_DEV_COREDUMP)] fault_reserve, busy_since_ns: None, command_label: 1, render_stamp: 0, compute_stamp: crate::g16_compute::STAMP, inflight: KVec::new(), pending: KVec::new(), messages_at_wait: 0, waits: 0, late_retirements: 0, stamp_episodes: 0, stamp_resolved: 0, pstate_transitions: 0, last_pstate: None, wait_timeouts: 0, last_retired: None, last_gpu_end: None, summary: SubmitSummary { since_ns: <kernel::time::Monotonic as kernel::time::ClockSource>::ktime_get(), ..Default::default() } }) })
     }
 
     pub(crate) fn boot(&mut self, pdev: &platform::Device<Core>) -> Result {
