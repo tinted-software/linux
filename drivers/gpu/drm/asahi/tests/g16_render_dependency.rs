@@ -187,14 +187,15 @@ fn render_completion_producers_match_compute_and_native_jobmeta() {
         let mut sequence = [0;0x800];
         g16_render_command::encode(&mut command,&mut sequence,stage,a).unwrap();
         let wire = layout(stage);
-        assert_eq!(&command[wire.job_meta..wire.job_meta+8], &user.to_le_bytes());
-        assert_eq!(&command[wire.job_meta+8..wire.job_meta+16], &internal.to_le_bytes());
+        let meta = if stage == Stage::Tiling { 0x878 } else { 0xbc0 };
+        assert_eq!(&command[meta..meta+8], &user.to_le_bytes());
+        assert_eq!(&command[meta+8..meta+16], &internal.to_le_bytes());
         let f = wire.finalize + if stage == Stage::Tiling {0x48} else {0xc};
         assert_eq!(&sequence[f..f+8], &internal.to_le_bytes());
         let mut dependency = [0;0x40];
         g16_render_command::render_dependency(&mut dependency,internal,0x71,a.stamp,a.stamp+0x100).unwrap();
         assert_eq!(&dependency[4..12], &internal.to_le_bytes());
-        assert_ne!(&sequence[f..f+8], &command[wire.job_meta..wire.job_meta+8]);
+        assert_ne!(&sequence[f..f+8], &command[meta..meta+8]);
         // Every relocated/fanout sequence keeps its internal finalizer cell.
         if stage == Stage::Fragment {
             for n in 1..=8 {
