@@ -29,6 +29,30 @@ pub(crate) const PATCHBAY_TEXT_SHA256: [u8; 32] = [
     0x0f, 0xa7, 0x07, 0x99, 0x35, 0xab, 0xa3, 0x4a, 0x1f, 0xb9, 0xe3, 0x4b, 0x09, 0x08, 0xef, 0x98,
     0x46, 0x1f, 0x07, 0xe6, 0x9c, 0x71, 0x17, 0xd6, 0xa9, 0x3a, 0xb9, 0x25, 0x6c, 0x98, 0x5e, 0x78,
 ];
+/// The same with iBoot's other writes zeroed too: header words 15 and 16 and
+/// the two GPU setup records after the patchbay. What is left is byte for byte
+/// the c000 __TEXT of Apple's 26.6.2 Firmware/agx/armfw_g15g.im4p, which the
+/// J613 and the J615 share; only `asahi.g16_j615_setup_records=1` accepts it.
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) const IMAGE_FILE_TEXT_SHA256: [u8; 32] = [
+    0xc7, 0xec, 0x1a, 0xb3, 0x31, 0x8b, 0xe5, 0xa1, 0x0d, 0x4a, 0x2e, 0xeb, 0x5e, 0x25, 0x77, 0xbd,
+    0xc3, 0xd4, 0xd1, 0xa5, 0xc0, 0xe9, 0x49, 0x06, 0xd3, 0xe5, 0x1b, 0xab, 0x22, 0x2e, 0xc1, 0x95,
+];
+/// iBoot-written outside the patchbay on the J613: header words 15-16 and
+/// the setup records up to the next table (placeholders in the file).
+const SETUP_WRITES: [core::ops::Range<usize>; 2] = [0x23c..0x244, 0x5d07d..0x5d630];
+
+/// Zero iBoot's writes outside the patchbay (after `normalize_patchbay`).
+fn normalize_setup_records(text: &mut [u8]) -> bool {
+    if text.len() != TEXT_SIZE as usize {
+        return false;
+    }
+    for range in SETUP_WRITES {
+        text[range].fill(0);
+    }
+    true
+}
+
 const INFO_HEADER: usize = 0x200;
 /// Header words 0-2 (branch, 'uuid', version 5) and 11-13 (patchbay offset,
 /// patchbay size, text size) of the 25G83 C0 image; its UUID is words 5-8.
@@ -196,6 +220,34 @@ pub(crate) fn identify_loaded(
                 board.name);
             return Err(ENODEV);
         }
+        let mut digest = [0u8; 32];
+        // SAFETY: the initialized private copy and distinct digest live for the
+        // synchronous SHA-256 call.
+        unsafe { bindings::sha256(canonical.as_ptr(), canonical.len(), digest.as_mut_ptr()) };
+        if digest != image.text_sha256 {
+            // Is it the 26.6.2 image, with only iBoot's GPU setup records
+            // (outside the patchbay) differing from the J613's?
+            let mut file = [0u8; 32];
+            if normalize_setup_records(&mut canonical) {
+                // SAFETY: as above.
+                unsafe { bindings::sha256(canonical.as_ptr(), canonical.len(), file.as_mut_ptr()) };
+            }
+            if file != IMAGE_FILE_TEXT_SHA256 {
+                dev_err!(pdev.as_ref(), "G16G: {}: unsupported normalized firmware SHA-256 {:02x?}\n",
+                    board.name, digest);
+                return Err(ENODEV);
+            }
+            if *crate::module_parameters::g16_j615_setup_records.value() != 1 {
+                dev_err!(pdev.as_ref(),
+                    "G16G: {}: the 26.6.2 GPU image, but iBoot's GPU setup records differ from the J613's ({:02x?}); not started. asahi.g16_j615_setup_records=1 accepts them; please report this line\n",
+                    board.name, digest);
+                return Err(ENODEV);
+            }
+            dev_warn!(pdev.as_ref(),
+                "G16G: {}: the 26.6.2 GPU image with this Mac's own iBoot GPU setup records ({:02x?}), accepted by asahi.g16_j615_setup_records=1\n",
+                board.name, digest);
+            return Ok(Firmware { resources, board });
+        }
     }
     let mut digest = [0u8; 32];
     // SAFETY: the initialized private copy and distinct digest live for the
@@ -332,6 +384,27 @@ mod tests {
         d[0x4000] ^= 1;
         assert!(normalize_patchbay(&mut d, &RUBRA, 0xffff_fc00_0000_0000));
         assert!(a != d);
+    }
+
+    #[test]
+    fn setup_records_are_outside_the_patchbay_and_the_code() {
+        for range in SETUP_WRITES.iter() {
+            assert!(range.end <= PATCHBAY.start || range.start >= PATCHBAY.end);
+            assert!(range.end <= TEXT_SIZE as usize);
+        }
+        // The header's identifying words (0-13) stay covered; 15 and 16 are iBoot's.
+        assert!(SETUP_WRITES[0].start >= INFO_HEADER + 4 * 14);
+        let mut a = patchbay_fixture(&RUBRA);
+        assert!(normalize_patchbay(&mut a, &RUBRA, 0xffff_fc00_0000_0000));
+        let mut b = a.clone();
+        b[0x5d100] ^= 1;
+        b[0x240] ^= 1;
+        assert!(normalize_setup_records(&mut a) && normalize_setup_records(&mut b));
+        assert!(a == b);
+        b[0x4000] ^= 1;
+        assert!(normalize_setup_records(&mut b));
+        assert!(a != b);
+        assert!(!normalize_setup_records(&mut [0; 64]));
     }
 
     #[test]
