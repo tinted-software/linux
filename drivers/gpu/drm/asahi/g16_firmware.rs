@@ -14,6 +14,80 @@ pub(crate) const TEXT_SHA256: [u8; 32] = [
     0xe8, 0xf5, 0x52, 0xb5, 0x10, 0x8c, 0x4e, 0xa6, 0x20, 0xbe, 0xdb, 0x7b, 0xbc, 0xa0, 0x31, 0x64,
 ];
 
+/// The 25G83 G15G C0 image's identity without its per-Mac patchbay
+/// (experimental J615 admission). The image-info header at __TEXT+0x200 names
+/// the patchbay iBoot fills at load: 0x231 bytes of tagged values at 0x5ce4c.
+/// Besides boot entropy (GKTS, ECAP) they hold this Mac's physical GPU
+/// carveouts, which move with installed RAM and the iBoot layout, so the
+/// J613's GKTS/ECAP-only digest above can only ever match a Mac laid out like
+/// the one it was taken on. This digest is the same loaded J613 image with the
+/// whole patchbay zeroed; every byte outside it, code and iBoot's GPU setup
+/// records included, stays covered. The carveouts are not dropped: each is
+/// compared with the region m1n1 reserved for it before the patchbay is zeroed.
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) const PATCHBAY_TEXT_SHA256: [u8; 32] = [
+    0x0f, 0xa7, 0x07, 0x99, 0x35, 0xab, 0xa3, 0x4a, 0x1f, 0xb9, 0xe3, 0x4b, 0x09, 0x08, 0xef, 0x98,
+    0x46, 0x1f, 0x07, 0xe6, 0x9c, 0x71, 0x17, 0xd6, 0xa9, 0x3a, 0xb9, 0x25, 0x6c, 0x98, 0x5e, 0x78,
+];
+const INFO_HEADER: usize = 0x200;
+/// Header words 0-2 (branch, 'uuid', version 5) and 11-13 (patchbay offset,
+/// patchbay size, text size) of the 25G83 C0 image; its UUID is words 5-8.
+const INFO_WORDS: [(usize, u32); 6] = [(0, 0x1400021a), (1, 0x6469_7575), (2, 5),
+    (11, 0x5ce4c), (12, 0x231), (13, 0x60000)];
+/// 82C6019B-BE1A-3338-9DB9-30C20BBBCEB5, the iop-gfx-nub uuid on 26.6.2.
+const IMAGE_UUID: [u8; 16] = [0x82, 0xc6, 0x01, 0x9b, 0xbe, 0x1a, 0x33, 0x38,
+    0x9d, 0xb9, 0x30, 0xc2, 0x0b, 0xbb, 0xce, 0xb5];
+const PATCHBAY: core::ops::Range<usize> = 0x5ce4c..0x5ce4c + 0x231;
+
+fn le32(text: &[u8], offset: usize) -> Option<u32> {
+    Some(u32::from_le_bytes(text.get(offset..offset + 4)?.try_into().ok()?))
+}
+
+/// Check the image-info header and the patchbay's carveout values against
+/// this boot's reserved regions, then zero the patchbay. On any refusal the
+/// copy is left as it was.
+fn normalize_patchbay(text: &mut [u8], regions: &[(u64, u64); 4], firmware_va: u64) -> bool {
+    if text.len() != TEXT_SIZE as usize
+        || INFO_WORDS.iter().any(|&(i, v)| le32(text, INFO_HEADER + 4 * i) != Some(v))
+        || text[INFO_HEADER + 0x14..INFO_HEADER + 0x24] != IMAGE_UUID
+    {
+        return false;
+    }
+    // Tag (as stored), the value it must hold, and whether it was seen once.
+    let mut expected: [(&[u8; 4], u64, u32); 6] = [
+        (b"BtpG", regions[0].0, 0), // ttbs
+        (b"BPTP", regions[1].0, 0), // pagetables
+        (b"SPTP", regions[1].1, 0), // pagetables size
+        (b"BlpP", regions[2].0, 0), // handoff
+        (b"S2xG", regions[3].0, 0), // shared-l2
+        (b"BVTP", firmware_va, 0),  // firmware __TEXT VA
+    ];
+    let mut at = PATCHBAY.start;
+    while at < PATCHBAY.end {
+        let Some(length) = le32(text, at + 4) else { return false };
+        let value = at + 8;
+        let Some(end) = value.checked_add(length as usize) else { return false };
+        if end > PATCHBAY.end {
+            return false;
+        }
+        for item in expected.iter_mut() {
+            if text[at..at + 4] == item.0[..] {
+                let Ok(bytes) = <[u8; 8]>::try_from(&text[value..end]) else { return false };
+                if u64::from_le_bytes(bytes) != item.1 {
+                    return false;
+                }
+                item.2 += 1;
+            }
+        }
+        at = end;
+    }
+    if at != PATCHBAY.end || expected.iter().any(|item| item.2 != 1) {
+        return false;
+    }
+    text[PATCHBAY].fill(0);
+    true
+}
+
 pub(crate) struct Image {
     pub(crate) text_size: u64,
     pub(crate) data_size: u64,
@@ -112,6 +186,17 @@ pub(crate) fn identify_loaded(
     if !normalize_boot_entropy(&mut canonical, &image) {
         return Err(ENODEV);
     }
+    if f.patchbay_identity {
+        let r = &resources.regions;
+        let regions = [(r[0].base, r[0].size), (r[1].base, r[1].size),
+            (r[2].base, r[2].size), (r[3].base, r[3].size)];
+        if !normalize_patchbay(&mut canonical, &regions, resources.firmware_vas[0]) {
+            dev_err!(pdev.as_ref(),
+                "G16G: {}: firmware image header or patchbay carveouts differ from this boot's reservations\n",
+                board.name);
+            return Err(ENODEV);
+        }
+    }
     let mut digest = [0u8; 32];
     // SAFETY: the initialized private copy and distinct digest live for the
     // synchronous SHA-256 call. Normalization never writes loaded firmware.
@@ -188,6 +273,84 @@ mod tests {
             assert!(bytes == original);
         }
         assert!(!normalize_boot_entropy(&mut [0; 64], &J613_IMAGE));
+    }
+
+    fn patchbay_fixture(regions: &[(u64, u64); 4]) -> Vec<u8> {
+        let mut bytes = image_fixture();
+        for &(i, v) in INFO_WORDS.iter() {
+            bytes[INFO_HEADER + 4 * i..INFO_HEADER + 4 * i + 4].copy_from_slice(&v.to_le_bytes());
+        }
+        bytes[INFO_HEADER + 0x14..INFO_HEADER + 0x24].copy_from_slice(&IMAGE_UUID);
+        // The 25G83 C0 patchbay's tag sequence and lengths, as loaded on a J613.
+        let tags: [(&[u8; 4], usize); 31] = [(b"GKTS",8),(b"BPxG",8),(b"SPxG",8),(b"DILS",8),
+            (b"SRSA",8),(b"GFCM",8),(b"SSSC",8),(b"qF8v",4),(b"LRSD",1),(b"SVSD",8),(b"LCSD",8),
+            (b"ZSTR",4),(b"BPTP",8),(b"TNGI",1),(b"oeNS",1),(b"SEBC",8),(b"ECAP",8),(b"BVTP",8),
+            (b"sP1T",8),(b"BtpG",8),(b"StpG",8),(b"BlpP",8),(b"S2xG",8),(b"SPTP",8),(b"SZSD",8),
+            (b"LZSD",8),(b"LLTR",1),(b"SNUT",8),(b"ZNUT",4),(b"OTTR",8),(b"ARcM",4)];
+        let mut at = PATCHBAY.start;
+        for (tag, len) in tags {
+            bytes[at..at + 4].copy_from_slice(tag);
+            bytes[at + 4..at + 8].copy_from_slice(&(len as u32).to_le_bytes());
+            let value: u64 = match tag {
+                b"BtpG" => regions[0].0, b"BPTP" => regions[1].0, b"SPTP" => regions[1].1,
+                b"BlpP" => regions[2].0, b"S2xG" => regions[3].0, b"BVTP" => 0xffff_fc00_0000_0000,
+                _ => 0x5a5a_5a5a_5a5a_5a5a,
+            };
+            bytes[at + 8..at + 8 + len].copy_from_slice(&value.to_le_bytes()[..len]);
+            at += 8 + len;
+        }
+        // Two placeholder records follow in the real image; pad to the end here.
+        assert!(at <= PATCHBAY.end);
+        if at < PATCHBAY.end {
+            let pad = PATCHBAY.end - at - 8;
+            bytes[at..at + 4].copy_from_slice(b"ZSOI");
+            bytes[at + 4..at + 8].copy_from_slice(&(pad as u32).to_le_bytes());
+            bytes[at + 8..PATCHBAY.end].fill(0x33);
+        }
+        bytes
+    }
+
+    const RUBRA: [(u64, u64); 4] = [(0x103fffb8000, 0x4000), (0x103fff78000, 0x40000),
+        (0x103fff70000, 0x4000), (0x103fff74000, 0x4000)];
+
+    #[test]
+    fn patchbay_identity_ignores_carveout_placement_but_checks_it() {
+        let moved = RUBRA.map(|(b, s)| (b - 0x200000000, s));
+        let mut a = patchbay_fixture(&RUBRA);
+        let mut b = patchbay_fixture(&moved);
+        assert!(normalize_patchbay(&mut a, &RUBRA, 0xffff_fc00_0000_0000));
+        assert!(normalize_patchbay(&mut b, &moved, 0xffff_fc00_0000_0000));
+        assert!(a == b, "two RAM layouts give one identity");
+        // Carveouts that are not the reserved regions refuse, unchanged.
+        let mut c = patchbay_fixture(&RUBRA);
+        let original = c.clone();
+        assert!(!normalize_patchbay(&mut c, &moved, 0xffff_fc00_0000_0000));
+        assert!(c == original);
+        assert!(!normalize_patchbay(&mut c, &RUBRA, 0xffff_fc00_0004_0000));
+        // Code outside the patchbay stays covered.
+        let mut d = patchbay_fixture(&RUBRA);
+        d[0x4000] ^= 1;
+        assert!(normalize_patchbay(&mut d, &RUBRA, 0xffff_fc00_0000_0000));
+        assert!(a != d);
+    }
+
+    #[test]
+    fn patchbay_identity_rejects_other_headers_and_broken_lists() {
+        for offset in [INFO_HEADER, INFO_HEADER + 4, INFO_HEADER + 8, INFO_HEADER + 0x14,
+            INFO_HEADER + 0x2c, INFO_HEADER + 0x30, INFO_HEADER + 0x34] {
+            let mut bytes = patchbay_fixture(&RUBRA);
+            bytes[offset] ^= 1;
+            assert!(!normalize_patchbay(&mut bytes, &RUBRA, 0xffff_fc00_0000_0000), "{offset:x}");
+        }
+        // A length running past the patchbay, and a missing carveout tag.
+        let mut long = patchbay_fixture(&RUBRA);
+        long[PATCHBAY.start + 4] = 0xff;
+        assert!(!normalize_patchbay(&mut long, &RUBRA, 0xffff_fc00_0000_0000));
+        let mut renamed = patchbay_fixture(&RUBRA);
+        let at = renamed.windows(4).position(|w| w == b"BlpP").unwrap();
+        renamed[at] = b'X';
+        assert!(!normalize_patchbay(&mut renamed, &RUBRA, 0xffff_fc00_0000_0000));
+        assert!(!normalize_patchbay(&mut [0; 64], &RUBRA, 0xffff_fc00_0000_0000));
     }
 
     #[test]

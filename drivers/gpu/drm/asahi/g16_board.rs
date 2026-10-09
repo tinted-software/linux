@@ -18,6 +18,9 @@ pub(crate) struct FirmwareImage {
     pub(crate) gkts: usize,
     pub(crate) ecap: usize,
     pub(crate) loader_iomaps: usize,
+    /// Identify the image by `crate::g16_firmware::PATCHBAY_TEXT_SHA256` (patchbay
+    /// zeroed, carveouts checked) instead of the exact loaded `text_sha256`.
+    pub(crate) patchbay_identity: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -155,6 +158,7 @@ pub(crate) static J613: Board = Board {
         gkts: 0x5ce4c,
         ecap: 0x5cf2f,
         loader_iomaps: 0x1228e0,
+        patchbay_identity: false,
     },
     sgx_version: 0x07022000,
     sgx_counts: 0x0011010a,
