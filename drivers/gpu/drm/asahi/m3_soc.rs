@@ -435,8 +435,15 @@ pub(crate) static T8122: Soc = Soc {
 /// - HwDataB +0x17e0..+0x1860: the G15G firmware's flag words (T6030 has 1 at +0x17e8,
 ///   +0x1804, +0x1814 and +0x1860 and all-ones at +0x1848);
 /// - HwDataA +0x11e0: 30 (T6030: 40), a word of the shader-engine controller block;
-/// - HwDataA +0x1290: 125, and HwDataA +0x424c: 24000000, the 24 MHz reference clock.
-static T8122_HWDATA_WORDS: [(usize, u32); 17] = [
+/// - HwDataA +0x1290: 125, and HwDataA +0x424c: 24000000, the 24 MHz reference clock;
+/// - HwDataA +0x418c..+0x41d8: the G15G DPE leakage configuration (20 words: 1, 500, 5, sixteen
+///   table entries of 12500 or 3000, then 1). The shared builder leaves this block zero on G15
+///   (see the TODO in initdata.rs), as T6030's macOS capture has it. On a J613 the same 20
+///   constants are written by macOS 26 (HwData read live under the hypervisor) and by the modelled
+///   14.8.3 mac15g kext whose InitData ran the current14 firmware under Linux. They are round
+///   constants, not the fuse-derived leakage (HwDataA +0x42a4/+0x42e4); seen on one J613 only.
+///   A candidate for the current14 start stall, untested on current14 hardware.
+static T8122_HWDATA_WORDS: [(usize, u32); 37] = [
     (0xa30, 0),
     (0xa34, 4),
     (0x17e0, 1),
@@ -454,7 +461,35 @@ static T8122_HWDATA_WORDS: [(usize, u32); 17] = [
     (0x4580 + 0x11e0, 30),
     (0x4580 + 0x1290, 125),
     (0x4580 + 0x424c, 24_000_000),
+    (0x4580 + 0x418c, 1),
+    (0x4580 + 0x4190, 500),
+    (0x4580 + 0x4194, 5),
+    (0x4580 + 0x4198, 12_500),
+    (0x4580 + 0x419c, 12_500),
+    (0x4580 + 0x41a0, 12_500),
+    (0x4580 + 0x41a4, 12_500),
+    (0x4580 + 0x41a8, 12_500),
+    (0x4580 + 0x41ac, 3_000),
+    (0x4580 + 0x41b0, 3_000),
+    (0x4580 + 0x41b4, 3_000),
+    (0x4580 + 0x41b8, 12_500),
+    (0x4580 + 0x41bc, 12_500),
+    (0x4580 + 0x41c0, 12_500),
+    (0x4580 + 0x41c4, 12_500),
+    (0x4580 + 0x41c8, 12_500),
+    (0x4580 + 0x41cc, 12_500),
+    (0x4580 + 0x41d0, 12_500),
+    (0x4580 + 0x41d4, 12_500),
+    (0x4580 + 0x41d8, 1),
 ];
+
+// The DPE leakage configuration lies inside HwDataA's host-written +0x4188..+0x41dc window,
+// before the cluster leakage tables (+0x42a4) that carry the fuse values.
+const _: () = {
+    let (first, last) = (T8122_HWDATA_WORDS[17].0, T8122_HWDATA_WORDS[36].0);
+    assert!(first == 0x4580 + 0x418c && last == 0x4580 + 0x41d8 && last - first == 19 * 4);
+    assert!(0x4580 + 0x4188 <= first && last + 4 <= 0x4580 + 0x41dc);
+};
 
 /// The T8122 Globals words that differ from the shared builder's: +0x9bc, the CDM backoff
 /// timeout (4) with the three bytes after it 0 (T6030: 1, 0, 0).
